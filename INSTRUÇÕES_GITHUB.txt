@@ -1,0 +1,56 @@
+===============================================
+INSTRUÇÕES PARA SUBIR O CÓDIGO PARA O GITHUB
+===============================================
+
+PASSO 1: INSTALAR O GIT
+------------------------
+1. Baixe o Git em: https://git-scm.com/download/win
+2. Execute o instalador e siga as instruções (pode deixar as opções padrão)
+3. Após instalar, REINICIE o VS Code
+
+PASSO 2: CONFIGURAR O GIT (Execute no terminal do VS Code)
+-----------------------------------------------------------
+git config --global user.name "Seu Nome"
+git config --global user.email "seu.email@example.com"
+
+PASSO 3: INICIALIZAR O REPOSITÓRIO LOCAL
+-----------------------------------------
+cd "c:\Users\Devanildo\Downloads\botpremium-main"
+git init
+git add .
+git commit -m "Primeiro commit - Bot Premium"
+
+PASSO 4: CRIAR REPOSITÓRIO NO GITHUB
+-------------------------------------
+1. Acesse: https://github.com/new
+2. Escolha um nome para o repositório (ex: botpremium)
+3. DEIXE DESMARCADO "Initialize this repository with a README"
+4. Clique em "Create repository"
+5. Copie a URL que aparece (algo como: https://github.com/seu-usuario/botpremium.git)
+
+PASSO 5: CONECTAR E ENVIAR PARA O GITHUB
+-----------------------------------------
+git remote add origin https://github.com/SEU-USUARIO/NOME-DO-REPO.git
+git branch -M main
+git push -u origin main
+
+OBSERVAÇÕES IMPORTANTES:
+------------------------
+- Substitua "Seu Nome" e "seu.email@example.com" pelos seus dados reais
+- Substitua "SEU-USUARIO" e "NOME-DO-REPO" pela URL do seu repositório
+- Se pedir autenticação, use seu usuário do GitHub e um Personal Access Token
+  (não use senha comum, o GitHub não aceita mais)
+
+COMO CRIAR UM PERSONAL ACCESS TOKEN:
+-------------------------------------
+1. Acesse: https://github.com/settings/tokens
+2. Clique em "Generate new token" > "Generate new token (classic)"
+3. Dê um nome (ex: "Bot Premium")
+4. Marque a opção "repo" (acesso completo aos repositórios)
+5. Clique em "Generate token"
+6. COPIE O TOKEN (você não verá ele novamente!)
+7. Use esse token como senha quando o Git pedir
+
+===============================================
+Após seguir todos os passos, seu código estará no GitHub!
+===============================================

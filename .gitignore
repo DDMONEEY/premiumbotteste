@@ -1,0 +1,28 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+.env
+
+# Logs
+logs/
+*.log
+bot_out.log
+
+# WhatsApp session/cache
+.wwebjs_auth/
+.wwebjs_cache/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Build
+dist/
+build/
