@@ -85,6 +85,12 @@ client.on('ready', async () => {
 //  LÓGICA DE MENSAGENS
 // ============================================================
 client.on('message', async (message) => {
+    try {
+        // Tenta marcar como lida, mas não derruba o bot se falhar
+        await client.sendSeen(message.from);
+    } catch (e) {
+        console.log("Aviso: Falha ao marcar como lida (markedUnread), mas o processo continua.");
+    }
     
     const chat = await message.getChat();
     
