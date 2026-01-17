@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -11,8 +12,10 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.9",
     "axios": "^1.13.2",
-    "express": "^4.22.1",
+    "qrcode-terminal": "^0.12.0",
+    "pino": "^8.19.0",
     "pdf-extraction": "^1.0.2"
   }
 }
