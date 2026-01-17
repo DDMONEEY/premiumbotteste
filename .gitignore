@@ -14,6 +14,10 @@ bot_out.log
 # WhatsApp session/cache
 .wwebjs_auth/
 .wwebjs_cache/
+auth_info_baileys/
+
+# QR Code gerado
+qrcode.png
 
 # OS files
 .DS_Store

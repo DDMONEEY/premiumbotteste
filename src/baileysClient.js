@@ -1,6 +1,7 @@
 const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const P = require('pino');
-const qrcode = require('qrcode-terminal');
+const qrcodeTerminal = require('qrcode-terminal');
+const QRCode = require('qrcode');
 const fs = require('fs');
 const path = require('path');
 
@@ -61,8 +62,50 @@ class BaileysClient {
 
                 // Gerar QR Code
                 if (qr && !this.qrGenerated) {
-                    console.log('\n   [ ! ] NECESSARIO ESCANEAR O QR CODE ABAIXO:\n');
-                    qrcode.generate(qr, { small: true });
+                    console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                    console.log('📱 QR CODE PARA CONEXÃO WHATSAPP');
+                    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+                    
+                    // Gerar QR Code no terminal (para uso local)
+                    qrcodeTerminal.generate(qr, { small: true });
+                    
+                    // Gerar QR Code como string para logs
+                    try {
+                        const qrString = await QRCode.toString(qr, { 
+                            type: 'terminal',
+                            small: true 
+                        });
+                        console.log('\n' + qrString);
+                    } catch (err) {
+                        console.log('⚠️ Erro ao gerar QR alternativo');
+                    }
+                    
+                    // Gerar URL do QR Code (pode ser aberta no navegador)
+                    try {
+                        const qrDataURL = await QRCode.toDataURL(qr);
+                        console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                        console.log('🌐 OPÇÃO ALTERNATIVA - Copie e cole no navegador:');
+                        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                        console.log('\nDATA URL (Cole no navegador):');
+                        console.log(qrDataURL.substring(0, 100) + '...');
+                        console.log('\n💡 Ou salve como imagem em: qrcode.png');
+                        
+                        // Salvar QR Code como imagem
+                        await QRCode.toFile('./qrcode.png', qr);
+                        console.log('✅ QR Code salvo em: qrcode.png');
+                        
+                    } catch (err) {
+                        console.log('⚠️ Erro ao gerar URL do QR Code:', err.message);
+                    }
+                    
+                    console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                    console.log('📲 COMO CONECTAR:');
+                    console.log('1. Abra o WhatsApp no celular');
+                    console.log('2. Vá em Configurações > Aparelhos conectados');
+                    console.log('3. Toque em "Conectar um aparelho"');
+                    console.log('4. Escaneie o QR Code acima');
+                    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+                    
                     this.qrGenerated = true;
                 }
 
