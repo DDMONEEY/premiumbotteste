@@ -11,18 +11,10 @@ const { extrairDadosAvancado } = require('./src/pdfHandler');
 const { enviar } = require('./src/utils');
 
 const client = new Client({
-    authStrategy: new LocalAuth({ dataPath: './.wwebjs_auth' }),
-    puppeteer: { args: [
-        '--no-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-setuid-sandbox',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process',
-        '--disable-gpu'
-    ] },
-    authTimeoutMs: 60000,
-    protocolTimeout: 0
+    authStrategy: new LocalAuth(), // Isso fará com que a pasta .wwebjs_auth seja criada
+    puppeteer: {
+        args: ['--no-sandbox'],
+    }
 });
 
 const lastCommandUsage = {};  
