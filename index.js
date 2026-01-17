@@ -25,7 +25,10 @@ const client = new Client({
             '--disable-software-rasterizer',
             '--disable-extensions'
         ],
-    }
+        timeout: 60000, // 60 segundos
+    },
+    authTimeoutMs: 60000, // 60 segundos para autenticação
+    qrTimeoutMs: 60000, // 60 segundos para QR code
 });
 
 const lastCommandUsage = {};  
@@ -112,6 +115,13 @@ client.on('message', async (message) => {
         
         const chat = await message.getChat();
         if (!chat) return;
+        
+        // Tenta marcar como lida de forma silenciosa (ignora erros)
+        try {
+            await chat.sendSeen();
+        } catch (e) {
+            // Silenciosamente ignora erros de sendSeen
+        }
         
         // --- LEITURA DO PDF (LÓGICA) ---
         if (chat.name === NOME_GRUPO_AUDITORIA && AGUARDANDO_PDF_AVISO) {
@@ -227,7 +237,8 @@ client.on('message', async (message) => {
             `⚙️ *GESTÃO E CONTROLE (Interno)*\n` +
             `🔸 *!final*  → Envia regras de encerramento e e-mails.\n` +
             `🔸 *!atencao*  → Envia cobrança formal de prazo (24h).\n` +
-            `🔸 *!status*  → Exibe painel técnico de saúde do servidor.\n\n` +
+            `🔸 *!status*  → Exibe painel técnico de saúde do servidor.\n` +
+            `🔸 *!buscar* [termo]  → Busca nos logs por comandos/usuários.\n\n` +
             `📄 *IMPORTADOR DE AVISO (PDF)*\n` +
             `_Funcionalidade exclusiva do grupo ${NOME_GRUPO_AUDITORIA}_\n` +
             `1️⃣ Digite *!aviso*\n` +
@@ -236,6 +247,45 @@ client.on('message', async (message) => {
             `4️⃣ O bot lerá e extrairá os dados formatados.`;
             
         await chat.sendMessage(textoMenu);
+    }
+
+    // Comando de busca nos logs
+    if (textoRecebido.startsWith('!buscar ')) {
+        const termo = message.body.substring(8).trim(); // Remove "!buscar "
+        
+        if (!termo) {
+            await chat.sendMessage('⚠️ *Uso correto:* !buscar [termo]\n\n*Exemplo:* !buscar João');
+            return;
+        }
+
+        try {
+            const logPath = path.join(__dirname, 'logs', 'commands.log');
+            
+            if (!fs.existsSync(logPath)) {
+                await chat.sendMessage('📭 *Nenhum log encontrado ainda.*');
+                return;
+            }
+
+            const logContent = fs.readFileSync(logPath, 'utf-8');
+            const linhas = logContent.split('\n');
+            const resultados = linhas.filter(linha => 
+                linha.toLowerCase().includes(termo.toLowerCase())
+            ).slice(-10); // Últimas 10 ocorrências
+
+            if (resultados.length === 0) {
+                await chat.sendMessage(`🔍 *Busca:* "${termo}"\n❌ *Nenhum resultado encontrado.*`);
+            } else {
+                const resposta = 
+                    `🔍 *Busca:* "${termo}"\n` +
+                    `📊 *Resultados:* ${resultados.length} ${resultados.length === 10 ? '(últimos 10)' : ''}\n` +
+                    `━━━━━━━━━━━━━━━━━━━━━\n` +
+                    resultados.join('\n');
+                await chat.sendMessage(resposta);
+            }
+        } catch (error) {
+            console.error('Erro ao buscar logs:', error);
+            await chat.sendMessage('❌ *Erro ao buscar nos logs.*');
+        }
     }
 
     if (textoRecebido === '!status') {
