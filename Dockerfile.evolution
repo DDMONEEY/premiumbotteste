@@ -1,0 +1,23 @@
+# Dockerfile para bot-premium com Evolution API
+FROM node:18-slim
+
+# Diretório de trabalho
+WORKDIR /usr/src/app
+
+# Evita instalar dependências desnecessárias
+ENV NODE_ENV=production
+
+# Copia package.json primeiro para aproveitar cache do Docker
+COPY package*.json ./
+
+# Instala dependências
+RUN npm install --production
+
+# Copia o restante do código
+COPY . .
+
+# Expõe a porta do webhook
+EXPOSE 3000
+
+# Comando de start (usando Evolution API)
+CMD ["node", "index-evolution.js"]

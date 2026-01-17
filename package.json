@@ -11,9 +11,8 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "ffbinaries": "^1.1.6",
-    "pdf-extraction": "^1.0.2",
-    "qrcode-terminal": "^0.12.0",
-    "whatsapp-web.js": "github:pedroslopez/whatsapp-web.js#main"
+    "axios": "^1.13.2",
+    "express": "^4.22.1",
+    "pdf-extraction": "^1.0.2"
   }
 }
