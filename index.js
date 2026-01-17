@@ -13,6 +13,7 @@ const { enviar } = require('./src/utils');
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
+        headless: true,
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -20,12 +21,10 @@ const client = new Client({
             '--disable-accelerated-2d-canvas',
             '--no-first-run',
             '--no-zygote',
-            '--disable-gpu'
+            '--disable-gpu',
+            '--disable-software-rasterizer',
+            '--disable-extensions'
         ],
-    },
-    webVersionCache: {
-        type: 'remote',
-        remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
     }
 });
 
@@ -101,10 +100,11 @@ client.on('ready', async () => {
 //  LÓGICA DE MENSAGENS
 // ============================================================
 client.on('message', async (message) => {
-    const chat = await message.getChat();
-    
-    // --- LEITURA DO PDF (LÓGICA) ---
-    if (chat.name === NOME_GRUPO_AUDITORIA && AGUARDANDO_PDF_AVISO) {
+    try {
+        const chat = await message.getChat();
+        
+        // --- LEITURA DO PDF (LÓGICA) ---
+        if (chat.name === NOME_GRUPO_AUDITORIA && AGUARDANDO_PDF_AVISO) {
         if (message.hasMedia) {
             const media = await message.downloadMedia();
             
@@ -276,8 +276,18 @@ client.on('message', async (message) => {
     if (textoRecebido === '!ata') enviar(chat, ['ata_vistoria.pdf', 'ata_vistoria.docx']);
     if (textoRecebido === '!cnpj') enviar(chat, ['cartao-cnpj-premium.pdf']);
 
+    } catch (error) {
+        console.error('❌ Erro ao processar mensagem:', error.message);
+    }
 });
 
+// Tratamento de erros não capturados
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('⚠️ Promessa rejeitada não tratada:', reason);
+});
 
+process.on('uncaughtException', (error) => {
+    console.error('⚠️ Exceção não capturada:', error);
+});
 
 client.initialize();

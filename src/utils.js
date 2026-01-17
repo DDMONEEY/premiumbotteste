@@ -5,10 +5,17 @@ async function enviar(chat, arquivos) {
     setTimeout(async () => {
         try {
             for (let i = 0; i < arquivos.length; i++) {
-                const media = MessageMedia.fromFilePath(path.join(__dirname, '..', arquivos[i]));
-                await chat.sendMessage(media);
+                const filePath = path.join(__dirname, '..', arquivos[i]);
+                const media = MessageMedia.fromFilePath(filePath);
+                await chat.sendMessage(media, { sendMediaAsDocument: true });
+                // Delay entre envios para evitar sobrecarga
+                if (i < arquivos.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
             }
-        } catch (erro) { console.log('Erro envio:', erro.message); }
+        } catch (erro) { 
+            console.error('❌ Erro ao enviar arquivo:', erro.message);
+        }
     }, 3000);
 }
 
