@@ -13,7 +13,6 @@ const { enviar } = require('./src/utils');
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
-        // Remova o executablePath para que o bot tente usar o navegador padrão do pacote
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -23,6 +22,10 @@ const client = new Client({
             '--no-zygote',
             '--disable-gpu'
         ],
+    },
+    webVersionCache: {
+        type: 'remote',
+        remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
     }
 });
 
@@ -45,6 +48,18 @@ async function getUserDisplay(userId) {
 client.on('qr', (qr) => {
     console.log('\n   [ ! ] NECESSARIO ESCANEAR O QR CODE ABAIXO:\n');
     qrcode.generate(qr, { small: true });
+});
+
+client.on('authenticated', () => {
+    console.log('\n✅ Autenticação realizada com sucesso!');
+});
+
+client.on('auth_failure', msg => {
+    console.error('❌ Falha na autenticação:', msg);
+});
+
+client.on('disconnected', (reason) => {
+    console.log('⚠️ Cliente desconectado:', reason);
 });
 
 client.on('ready', async () => {
@@ -86,13 +101,6 @@ client.on('ready', async () => {
 //  LÓGICA DE MENSAGENS
 // ============================================================
 client.on('message', async (message) => {
-    try {
-        // Tenta marcar como lida, mas não derruba o bot se falhar
-        await client.sendSeen(message.from);
-    } catch (e) {
-        console.log("Aviso: Falha ao marcar como lida (markedUnread), mas o processo continua.");
-    }
-    
     const chat = await message.getChat();
     
     // --- LEITURA DO PDF (LÓGICA) ---
