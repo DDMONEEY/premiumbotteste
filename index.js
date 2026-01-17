@@ -70,6 +70,9 @@ client.on('ready', async () => {
             const grupoAuditoria = chats.find(chat => chat.name === NOME_GRUPO_AUDITORIA);
             
             if (grupoAuditoria) {
+                // Aguarda um pouco mais para garantir que o chat está pronto
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
                 // Coleta dados técnicos do servidor
                 const data = new Date();
                 const dataFormatada = data.toLocaleDateString('pt-BR');
@@ -91,9 +94,9 @@ client.on('ready', async () => {
                 );
             }
         } catch (err) {
-            logPainel('INICIALIZAÇÃO', 'Falha ao enviar mensagem de inicialização.');
+            console.error('⚠️ Falha ao enviar mensagem de inicialização:', err.message);
         }
-    }, 5000);
+    }, 10000); // Aumentado para 10 segundos
 });
 
 // ============================================================
@@ -101,7 +104,14 @@ client.on('ready', async () => {
 // ============================================================
 client.on('message', async (message) => {
     try {
+        // Verificações de segurança
+        if (!message || !message.from) return;
+        
+        // Pequeno delay para garantir que a mensagem está pronta
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
         const chat = await message.getChat();
+        if (!chat) return;
         
         // --- LEITURA DO PDF (LÓGICA) ---
         if (chat.name === NOME_GRUPO_AUDITORIA && AGUARDANDO_PDF_AVISO) {
