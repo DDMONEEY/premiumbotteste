@@ -31,16 +31,17 @@ async function sendMessage(jid, text) {
 // Função auxiliar para enviar arquivos
 async function sendFiles(jid, files) {
     for (const file of files) {
-        const filePath = path.join(__dirname, 'assets', file);
+        const filePath = path.join(__dirname, file);
         if (fs.existsSync(filePath)) {
             try {
+                console.log(`📎 Enviando arquivo: ${file}`);
                 await client.sendDocument(jid, filePath);
-                await new Promise(resolve => setTimeout(resolve, 1000)); // Delay entre envios
+                await new Promise(resolve => setTimeout(resolve, 2000)); // Delay entre envios
             } catch (error) {
-                console.error(`Erro ao enviar ${file}:`, error);
+                console.error(`❌ Erro ao enviar ${file}:`, error.message);
             }
         } else {
-            console.log(`⚠️ Arquivo não encontrado: ${file}`);
+            console.log(`⚠️ Arquivo não encontrado: ${filePath}`);
         }
     }
 }
