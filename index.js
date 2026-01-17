@@ -13,7 +13,13 @@ const { enviar } = require('./src/utils');
 const client = new Client({
     authStrategy: new LocalAuth(), // Isso fará com que a pasta .wwebjs_auth seja criada
     puppeteer: {
-        args: ['--no-sandbox'],
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-gpu', // Melhora o processamento de arquivos
+            '--disable-dev-shm-usage' // Evita erros de memória em sistemas críticos
+        ],
+        executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' // Use o Chrome real em vez do Chromium
     }
 });
 
