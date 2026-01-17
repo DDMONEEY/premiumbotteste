@@ -7,7 +7,6 @@ const pdf = require('pdf-extraction');
 const { ANTI_FLOOD_TIME, NOME_GRUPO_AUDITORIA, VERSAO_BOT, comandosValidos } = require('./src/config');
 const { logPainel, logComando } = require('./src/logger');
 const { extrairDadosAvancado } = require('./src/pdfHandler');
-const { enviar } = require('./src/utils');
 
 const client = new BaileysClient();
 
