@@ -47,7 +47,8 @@ class BaileysClient {
                 logger: P({ level: 'silent' }),
                 printQRInTerminal: false,
                 auth: state,
-                browser: ['Bot Premium', 'Chrome', '10.0'],
+                browser: ['Chrome (Linux)', '', ''],
+                defaultQueryTimeoutMs: undefined,
                 getMessage: async (key) => {
                     return { conversation: '' };
                 }
@@ -61,52 +62,56 @@ class BaileysClient {
                 const { connection, lastDisconnect, qr } = update;
 
                 // Gerar QR Code
-                if (qr && !this.qrGenerated) {
+                if (qr) {
                     console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-                    console.log('📱 QR CODE PARA CONEXÃO WHATSAPP');
+                    console.log('📱 NOVO QR CODE GERADO');
                     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
                     
-                    // Gerar QR Code no terminal (para uso local)
+                    // Gerar QR Code no terminal
+                    console.log('QR Code Terminal:');
                     qrcodeTerminal.generate(qr, { small: true });
                     
-                    // Gerar QR Code como string para logs
+                    // Salvar QR Code como imagem PNG
                     try {
-                        const qrString = await QRCode.toString(qr, { 
-                            type: 'terminal',
-                            small: true 
+                        const qrFilePath = path.join(process.cwd(), 'qrcode.png');
+                        await QRCode.toFile(qrFilePath, qr, {
+                            errorCorrectionLevel: 'H',
+                            type: 'png',
+                            quality: 0.95,
+                            margin: 1,
+                            width: 512
                         });
-                        console.log('\n' + qrString);
+                        console.log(`\n✅ QR Code salvo em: ${qrFilePath}`);
                     } catch (err) {
-                        console.log('⚠️ Erro ao gerar QR alternativo');
+                        console.log('⚠️ Erro ao salvar PNG:', err.message);
                     }
                     
-                    // Gerar URL do QR Code (pode ser aberta no navegador)
+                    // Gerar Data URL para visualização direta
                     try {
-                        const qrDataURL = await QRCode.toDataURL(qr);
-                        console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-                        console.log('🌐 OPÇÃO ALTERNATIVA - Copie e cole no navegador:');
-                        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-                        console.log('\nDATA URL (Cole no navegador):');
-                        console.log(qrDataURL.substring(0, 100) + '...');
-                        console.log('\n💡 Ou salve como imagem em: qrcode.png');
+                        const qrDataURL = await QRCode.toDataURL(qr, {
+                            errorCorrectionLevel: 'H',
+                            type: 'image/png',
+                            quality: 0.95,
+                            margin: 1,
+                            width: 512
+                        });
                         
-                        // Salvar QR Code como imagem
-                        await QRCode.toFile('./qrcode.png', qr);
-                        console.log('✅ QR Code salvo em: qrcode.png');
+                        console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                        console.log('🌐 VISUALIZAR QR CODE NO NAVEGADOR');
+                        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                        console.log('\nCopie TODA a linha abaixo e cole na barra de endereços do navegador:\n');
+                        console.log(qrDataURL);
+                        console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
                         
                     } catch (err) {
-                        console.log('⚠️ Erro ao gerar URL do QR Code:', err.message);
+                        console.log('⚠️ Erro ao gerar Data URL:', err.message);
                     }
                     
-                    console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-                    console.log('📲 COMO CONECTAR:');
-                    console.log('1. Abra o WhatsApp no celular');
-                    console.log('2. Vá em Configurações > Aparelhos conectados');
-                    console.log('3. Toque em "Conectar um aparelho"');
-                    console.log('4. Escaneie o QR Code acima');
+                    console.log('\n📲 INSTRUÇÕES:');
+                    console.log('1. Abra WhatsApp no celular');
+                    console.log('2. Menu > Aparelhos conectados > Conectar aparelho');
+                    console.log('3. Escaneie o QR Code acima ou abra o qrcode.png');
                     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-                    
-                    this.qrGenerated = true;
                 }
 
                 // Verificar conexão
@@ -115,6 +120,7 @@ class BaileysClient {
                     console.log('⚠️ Conexão fechada. Reconectar:', shouldReconnect);
                     
                     if (shouldReconnect) {
+                        this.qrGenerated = false;
                         setTimeout(() => this.initialize(), 3000);
                     }
                 } else if (connection === 'open') {
