@@ -23,6 +23,40 @@ async function getUserDisplay(userId) {
     }
 }
 
+// Função auxiliar para processar PDF com logging detalhado
+async function processarPDFComTimeout(buffer, timeoutMs = 30000) {
+    return new Promise((resolve, reject) => {
+        let resolvido = false;
+        
+        // Timeout
+        const timeoutId = setTimeout(() => {
+            if (!resolvido) {
+                resolvido = true;
+                reject(new Error(`Timeout ao processar PDF (${timeoutMs}ms)`));
+            }
+        }, timeoutMs);
+        
+        // Processar PDF
+        pdfParse(buffer)
+            .then(data => {
+                if (!resolvido) {
+                    resolvido = true;
+                    clearTimeout(timeoutId);
+                    console.log('✅ PDF processado com sucesso');
+                    resolve(data);
+                }
+            })
+            .catch(err => {
+                if (!resolvido) {
+                    resolvido = true;
+                    clearTimeout(timeoutId);
+                    console.error('❌ Erro ao parsear PDF:', err.message);
+                    reject(err);
+                }
+            });
+    });
+}
+
 // Função auxiliar para enviar mensagem para um JID
 async function sendMessage(jid, text) {
     await client.sendMessage(jid, text);
@@ -121,22 +155,20 @@ client.onMessage(async (msg) => {
                     msg.message.imageMessage?.mimetype;
                 
                 if (mimetype === 'application/pdf') {
+                    console.log('📄 [PDF] Iniciando processamento do PDF...');
                     await sendMessage(fromJid, '⚙️ *Processando arquivo...* Extraindo dados brutos.');
                     
                     try {
+                        console.log('📥 [PDF] Baixando arquivo da mensagem...');
                         const buffer = await client.downloadMedia(msg);
+                        console.log('✅ [PDF] Arquivo baixado:', buffer.length, 'bytes');
                         
-                        // Adicionar timeout de 30 segundos
-                        const timeoutPromise = new Promise((_, reject) => 
-                            setTimeout(() => reject(new Error('Timeout ao processar PDF')), 30000)
-                        );
+                        console.log('🔄 [PDF] Parseando PDF...');
+                        const pdfData = await processarPDFComTimeout(buffer, 30000);
                         
-                        const pdfData = await Promise.race([
-                            pdfParse(buffer),
-                            timeoutPromise
-                        ]);
-                        
+                        console.log('📊 [PDF] Extraindo dados do texto...');
                         const dados = extrairDadosAvancado(pdfData.text);
+                        console.log('✅ [PDF] Dados extraídos com sucesso');
                         
                         const resposta = 
                             `✅ *RESUMO DO AVISO GERADO*\n` +
@@ -162,7 +194,9 @@ client.onMessage(async (msg) => {
                             `• Valor declarado: ${dados.valor}\n` +
                             `• Observação: ${dados.obs}`;
 
+                        console.log('📤 [PDF] Enviando resposta...');
                         await sendMessage(fromJid, resposta);
+                        console.log('✅ [PDF] Resposta enviada com sucesso');
                         
                         try {
                             const senderId = msg.key.participant || msg.key.remoteJid;
@@ -174,7 +208,8 @@ client.onMessage(async (msg) => {
                         return;
 
                     } catch (error) {
-                        console.error('❌ Erro ao processar PDF:', error.message);
+                        console.error('❌ [PDF] Erro ao processar PDF:', error.message);
+                        console.error(error.stack);
                         
                         // Resetar flag mesmo em erro
                         AGUARDANDO_PDF_AVISO = false;
@@ -184,6 +219,7 @@ client.onMessage(async (msg) => {
                             `⏱️ *TIMEOUT*\nO processamento do arquivo demorou muito. Por favor, tente novamente.` :
                             `❌ *FALHA NA EXTRAÇÃO*\nO arquivo não possui texto selecionável, está protegido ou corrompido.\n\nErro: ${error.message}`;
                         
+                        console.log('📤 [PDF] Enviando mensagem de erro...');
                         await sendMessage(fromJid, msgErro);
                         
                         try {
@@ -193,6 +229,7 @@ client.onMessage(async (msg) => {
                         } catch (e) {}
                     }
                 } else {
+                    console.log('⚠️ [PDF] Formato inválido. Enviado:', mimetype);
                     await sendMessage(fromJid, '⚠️ *Formato Inválido.* Por favor, envie um arquivo PDF.');
                     AGUARDANDO_PDF_AVISO = false;
                 }
