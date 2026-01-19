@@ -13,6 +13,13 @@ class BaileysClient {
         this.readyHandlers = [];
         // Permitir configurar pasta de sessão fora do repositório
         this.authFolder = process.env.WA_AUTH_DIR || path.resolve('./auth_info_baileys');
+        
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('📂 CONFIGURAÇÃO DE SESSÃO');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log(`📍 Pasta de sessão: ${this.authFolder}`);
+        console.log(`🔒 Limpar sessão ao iniciar: ${process.env.CLEAN_SESSION_ON_START === '1' ? 'SIM (❌ ATIVAR APENAS PARA RESET)' : 'NÃO (✅ CORRETO PARA VPS)'}`);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
     }
 
     // Registrar handler de mensagens
@@ -33,6 +40,18 @@ class BaileysClient {
             // Garantir pasta de autenticação
             if (!fs.existsSync(this.authFolder)) {
                 fs.mkdirSync(this.authFolder, { recursive: true });
+                console.log('✅ Pasta de sessão criada');
+            } else {
+                // Verificar se já existe sessão salva
+                const files = fs.readdirSync(this.authFolder);
+                const sessionFiles = files.filter(f => f.startsWith('session-'));
+                if (sessionFiles.length > 0) {
+                    console.log(`✅ Sessão anterior encontrada: ${sessionFiles.length} arquivo(s)`);
+                    console.log('📌 Você NÃO precisa ler o QR code novamente!');
+                } else {
+                    console.log('⚠️ Nenhuma sessão anterior encontrada');
+                    console.log('📌 Será necessário ler o QR code na primeira conexão');
+                }
             }
 
             // Opcional: limpeza de sessão somente se explicitamente habilitado
@@ -56,8 +75,7 @@ class BaileysClient {
             // Obter versão mais recente do WhatsApp Web
             const { version } = await fetchLatestBaileysVersion();
             console.log(`📱 Usando WhatsApp Web v${version.join('.')}`);
-
-            // Criar socket
+            console.log('🔐 Sessão será salva em: ' + this.authFolder);
             this.sock = makeWASocket({
                 version,
                 logger: P({ level: 'silent' }),
