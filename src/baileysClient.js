@@ -59,7 +59,7 @@ class BaileysClient {
             // Criar socket
             this.sock = makeWASocket({
                 version,
-                logger: P({ level: 'error' }),
+                logger: P({ level: 'silent' }),
                 printQRInTerminal: false,
                 auth: state,
                 browser: ['Windows', 'Chrome', '120.0.0.0'],
@@ -69,6 +69,8 @@ class BaileysClient {
                 markOnlineOnConnect: true,
                 emitOwnEventsOnly: false,
                 maxMsgsInMemory: 100,
+                shouldIgnoreJid: () => false,
+                retryRequestDelayMs: 250,
                 getMessage: async (key) => {
                     return { conversation: '' };
                 }
@@ -180,6 +182,17 @@ class BaileysClient {
                 }
             });
 
+            // Handler de erros globais do Baileys
+            this.sock.ev.on('error', (err) => {
+                if (err?.message?.includes('MAC') || 
+                    err?.message?.includes('decrypt') ||
+                    err?.message?.includes('Bad MAC')) {
+                    // Silenciar erros de criptografia (são esperados em mensagens antigas)
+                    return;
+                }
+                console.error('⚠️ Erro Baileys:', err.message);
+            });
+
             // Evento de novas mensagens
             this.sock.ev.on('messages.upsert', async ({ messages, type }) => {
                 if (type !== 'notify') return;
@@ -193,6 +206,11 @@ class BaileysClient {
                         try {
                             await handler(msg);
                         } catch (err) {
+                            // Silenciar erros de decriptação
+                            if (err?.message?.includes('MAC') || 
+                                err?.message?.includes('decrypt')) {
+                                continue;
+                            }
                             console.error('Erro no handler de mensagem:', err);
                         }
                     }

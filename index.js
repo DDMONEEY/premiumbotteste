@@ -488,17 +488,37 @@ client.onMessage(async (msg) => {
         }
 
     } catch (error) {
+        // Silenciar erros de criptografia
+        if (error?.message?.includes('MAC') || 
+            error?.message?.includes('decrypt') ||
+            error?.message?.includes('Bad MAC')) {
+            return;
+        }
         console.error('❌ Erro ao processar mensagem:', error.message);
     }
 });
 
 // Tratamento de erros não capturados
 process.on('unhandledRejection', (reason, promise) => {
-    console.error('⚠️ Promessa rejeitada não tratada:', reason);
+    // Silenciar erros de criptografia/sessão
+    if (reason?.message?.includes('MAC') || 
+        reason?.message?.includes('decrypt') ||
+        reason?.message?.includes('Bad MAC') ||
+        reason?.message?.includes('session')) {
+        return;
+    }
+    console.error('⚠️ Promessa rejeitada:', reason?.message || reason);
 });
 
 process.on('uncaughtException', (error) => {
-    console.error('⚠️ Exceção não capturada:', error);
+    // Silenciar erros de criptografia/sessão
+    if (error?.message?.includes('MAC') || 
+        error?.message?.includes('decrypt') ||
+        error?.message?.includes('Bad MAC') ||
+        error?.message?.includes('session')) {
+        return;
+    }
+    console.error('⚠️ Exceção não capturada:', error?.message || error);
 });
 
 // Inicializar cliente
