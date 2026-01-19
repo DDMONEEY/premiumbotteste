@@ -11,7 +11,8 @@ class BaileysClient {
         this.qrGenerated = false;
         this.messageHandlers = [];
         this.readyHandlers = [];
-        this.authFolder = './auth_info_baileys';
+        // Permitir configurar pasta de sessão fora do repositório
+        this.authFolder = process.env.WA_AUTH_DIR || path.resolve('./auth_info_baileys');
     }
 
     // Registrar handler de mensagens
@@ -29,23 +30,23 @@ class BaileysClient {
         try {
             console.log('🚀 Iniciando conexão com Baileys...');
             
-            // Criar pasta de autenticação se não existir
+            // Garantir pasta de autenticação
             if (!fs.existsSync(this.authFolder)) {
                 fs.mkdirSync(this.authFolder, { recursive: true });
-            } else {
-                // Limpar sessão corrompida se existir
-                const sessionFile = path.join(this.authFolder, 'session-*.json');
+            }
+
+            // Opcional: limpeza de sessão somente se explicitamente habilitado
+            if (process.env.CLEAN_SESSION_ON_START === '1') {
                 try {
                     const files = fs.readdirSync(this.authFolder);
                     for (const file of files) {
                         if (file.startsWith('session-') && file.endsWith('.json')) {
-                            const filePath = path.join(this.authFolder, file);
-                            fs.unlinkSync(filePath);
-                            console.log(`🧹 Sessão corrompida removida: ${file}`);
+                            fs.unlinkSync(path.join(this.authFolder, file));
+                            console.log(`🧹 Sessão removida no start: ${file}`);
                         }
                     }
                 } catch (err) {
-                    console.log('⚠️ Não foi possível limpar sessão anterior');
+                    console.log('⚠️ Falha ao limpar sessão no start:', err.message);
                 }
             }
 
