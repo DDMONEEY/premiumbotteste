@@ -1,4 +1,4 @@
-const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion } = require('baileys');
 const P = require('pino');
 const qrcodeTerminal = require('qrcode-terminal');
 const QRCode = require('qrcode');
@@ -62,11 +62,13 @@ class BaileysClient {
                 logger: P({ level: 'error' }),
                 printQRInTerminal: false,
                 auth: state,
-                browser: ['Chrome (Linux)', '', ''],
+                browser: ['Windows', 'Chrome', '120.0.0.0'],
                 defaultQueryTimeoutMs: undefined,
                 generateHighQualityLinkPreview: true,
                 syncFullHistory: false,
-                shouldIgnoreJidEndpoint: false,
+                markOnlineOnConnect: true,
+                emitOwnEventsOnly: false,
+                maxMsgsInMemory: 100,
                 getMessage: async (key) => {
                     return { conversation: '' };
                 }
