@@ -66,6 +66,7 @@ class BaileysClient {
                 defaultQueryTimeoutMs: undefined,
                 generateHighQualityLinkPreview: true,
                 syncFullHistory: false,
+                shouldSyncHistoryMessage: false,
                 markOnlineOnConnect: true,
                 emitOwnEventsOnly: false,
                 maxMsgsInMemory: 100,
