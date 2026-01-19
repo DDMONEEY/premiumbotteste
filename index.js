@@ -188,17 +188,11 @@ client.onReady(async () => {
 // ============================================================
 client.onMessage(async (msg) => {
     try {
-        // Extrair informações da mensagem Baileys
-        const messageInfo = msg.message?.conversation || 
-                          msg.message?.extendedTextMessage?.text || '';
-        
-        if (!messageInfo) return;
-        
+        // JID e verificação de grupo primeiro para permitir mídia sem texto
         const fromJid = msg.key.remoteJid;
         const isGroup = fromJid.endsWith('@g.us');
-        
         if (!isGroup) return; // Ignora mensagens privadas
-        
+
         // Buscar informações do grupo
         let grupoNome = '';
         try {
@@ -208,6 +202,10 @@ client.onMessage(async (msg) => {
         } catch (e) {
             console.error('Erro ao buscar nome do grupo:', e);
         }
+
+        // Extrair texto (quando houver). Não sair ainda: mídia pode não ter texto.
+        const messageInfo = msg.message?.conversation ||
+                            msg.message?.extendedTextMessage?.text || '';
 
         // --- LEITURA DO PDF (LÓGICA) ---
         if (grupoNome === NOME_GRUPO_AUDITORIA && AGUARDANDO_PDF_AVISO) {
@@ -333,6 +331,9 @@ client.onMessage(async (msg) => {
             
             return;
         }
+
+        // Se não há texto, não há comandos; apenas finalize aqui
+        if (!messageInfo) return;
 
         let textoRecebido = messageInfo.toLowerCase().trim();
         
