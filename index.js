@@ -23,38 +23,70 @@ async function getUserDisplay(userId) {
     }
 }
 
-// Função auxiliar para processar PDF com logging detalhado
-async function processarPDFComTimeout(buffer, timeoutMs = 30000) {
-    return new Promise((resolve, reject) => {
-        let resolvido = false;
+// WRAPPER DE TIMEOUT ROBUSTO - Garante que tudo SEMPRE termina dentro do tempo limite
+async function withTimeout(promise, ms, operacao) {
+    console.log(`⏱️ [TIMEOUT] Iniciando "${operacao}" com limite de ${ms}ms...`);
+    
+    return Promise.race([
+        promise,
+        new Promise((_, reject) => {
+            const timer = setTimeout(() => {
+                console.error(`❌ [TIMEOUT] "${operacao}" EXPIROU após ${ms}ms!`);
+                reject(new Error(`TIMEOUT: ${operacao} levou mais de ${ms}ms`));
+            }, ms);
+            
+            // Cleanup automático
+            promise
+                .then(() => clearTimeout(timer))
+                .catch(() => clearTimeout(timer));
+        })
+    ]);
+}
+
+// Função para fazer download com timeout RIGOROSO
+async function downloadPDFComTimeout(msg, timeoutMs = 10000) {
+    console.log('📥 [DOWNLOAD] Iniciando download do arquivo...');
+    
+    try {
+        const buffer = await withTimeout(
+            client.downloadMedia(msg),
+            timeoutMs,
+            'download de arquivo'
+        );
         
-        // Timeout
-        const timeoutId = setTimeout(() => {
-            if (!resolvido) {
-                resolvido = true;
-                reject(new Error(`Timeout ao processar PDF (${timeoutMs}ms)`));
-            }
-        }, timeoutMs);
+        if (!buffer || buffer.length === 0) {
+            throw new Error('Buffer vazio após download');
+        }
         
-        // Processar PDF
-        pdfParse(buffer)
-            .then(data => {
-                if (!resolvido) {
-                    resolvido = true;
-                    clearTimeout(timeoutId);
-                    console.log('✅ PDF processado com sucesso');
-                    resolve(data);
-                }
-            })
-            .catch(err => {
-                if (!resolvido) {
-                    resolvido = true;
-                    clearTimeout(timeoutId);
-                    console.error('❌ Erro ao parsear PDF:', err.message);
-                    reject(err);
-                }
-            });
-    });
+        console.log(`✅ [DOWNLOAD] Arquivo baixado com sucesso: ${buffer.length} bytes`);
+        return buffer;
+    } catch (err) {
+        console.error(`❌ [DOWNLOAD] Erro no download: ${err.message}`);
+        throw err;
+    }
+}
+
+// Função para parsear PDF com timeout RIGOROSO
+async function parsearPDFComTimeout(buffer, timeoutMs = 15000) {
+    console.log('🔄 [PARSE] Iniciando parse do PDF...');
+    
+    try {
+        const pdfData = await withTimeout(
+            pdfParse(buffer),
+            timeoutMs,
+            'parse do PDF'
+        );
+        
+        if (!pdfData || !pdfData.text) {
+            throw new Error('PDF não contém texto ou dados inválidos');
+        }
+        
+        console.log(`✅ [PARSE] PDF parseado com sucesso: ${pdfData.text.length} caracteres`);
+        return pdfData;
+    } catch (err) {
+        console.error(`❌ [PARSE] Erro no parse: ${err.message}`);
+        throw err;
+    }
 }
 
 // Função auxiliar para enviar mensagem para um JID
@@ -151,101 +183,138 @@ client.onMessage(async (msg) => {
             console.log('🔍 [DETECTOR] AGUARDANDO_PDF_AVISO = true, verificando mensagem...');
             console.log('📨 [DETECTOR] Tipo de mensagem:', Object.keys(msg.message || {}));
             
-            if (msg.message?.documentMessage || msg.message?.imageMessage) {
-                const isDocument = !!msg.message?.documentMessage;
-                const mimetype = isDocument ? 
-                    msg.message.documentMessage.mimetype : 
-                    msg.message.imageMessage?.mimetype;
-                
-                console.log('📎 [DETECTOR] Tipo de documento:', { isDocument, mimetype });
-                
-                if (mimetype === 'application/pdf' || (isDocument && msg.message?.documentMessage?.fileName?.endsWith('.pdf'))) {
-                    console.log('📄 [PDF] Iniciando processamento do PDF...');
-                    await sendMessage(fromJid, '⚙️ *Processando arquivo...* Extraindo dados brutos.');
+            const isPDF = msg.message?.documentMessage && 
+                         (msg.message?.documentMessage?.mimetype === 'application/pdf' || 
+                          msg.message?.documentMessage?.fileName?.toLowerCase().endsWith('.pdf'));
+            
+            if (!isPDF) {
+                console.log('⚠️ [DETECTOR] Não é PDF. Ignorando...');
+                return;
+            }
+            
+            console.log('📄 [PDF] Arquivo PDF detectado! Iniciando processamento...');
+            
+            // Resetar flag IMEDIATAMENTE para evitar duplicatas
+            AGUARDANDO_PDF_AVISO = false;
+            
+            // Enviar mensagem de processamento
+            try {
+                await sendMessage(fromJid, '⚙️ *Processando arquivo PDF...*\n\nIsso pode levar alguns segundos. Aguarde...');
+            } catch (e) {
+                console.error('❌ Erro ao enviar mensagem de processamento:', e.message);
+            }
+            
+            // Processar PDF em paralelo (não bloqueia retorno ao usuário)
+            (async () => {
+                try {
+                    console.log('\n═══════════════════════════════════════════════');
+                    console.log('🚀 INICIANDO PROCESSAMENTO DE PDF');
+                    console.log('═══════════════════════════════════════════════\n');
+                    
+                    // ETAPA 1: Download com timeout rigoroso
+                    let buffer;
+                    try {
+                        console.log('ETAPA 1/3: Download do arquivo');
+                        buffer = await downloadPDFComTimeout(msg, 10000);
+                    } catch (err) {
+                        throw new Error(`DOWNLOAD: ${err.message}`);
+                    }
+                    
+                    // ETAPA 2: Parse com timeout rigoroso
+                    let pdfData;
+                    try {
+                        console.log('\nETAPA 2/3: Parse do PDF');
+                        pdfData = await parsearPDFComTimeout(buffer, 15000);
+                    } catch (err) {
+                        throw new Error(`PARSE: ${err.message}`);
+                    }
+                    
+                    // ETAPA 3: Extração de dados
+                    let dados;
+                    try {
+                        console.log('\nETAPA 3/3: Extração de dados');
+                        console.log('📊 [EXTRACT] Chamando extrairDadosAvancado...');
+                        dados = extrairDadosAvancado(pdfData.text);
+                        console.log('✅ [EXTRACT] Dados extraídos com sucesso');
+                    } catch (err) {
+                        throw new Error(`EXTRAÇÃO: ${err.message}`);
+                    }
+                    
+                    // Construir resposta
+                    console.log('\n📝 [RESPONSE] Construindo resposta...');
+                    const resposta = 
+                        `✅ *RESUMO DO AVISO EXTRAÍDO*\n` +
+                        `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                        `• Nº sinistro: ${dados.sinistro}\n` +
+                        `• Seguradora: ${dados.seguradora}\n` +
+                        `• Segurado: ${dados.segurado}\n` +
+                        `• Motorista: ${dados.motorista}\n` +
+                        `• Telefone: ${dados.telMotorista}\n` +
+                        `• Placas: ${dados.placas}\n` +
+                        `• Remetente: ${dados.remetente}\n` +
+                        `• Origem: ${dados.origem}\n` +
+                        `• Destinatário: ${dados.destinatario}\n` +
+                        `• Destino: ${dados.destino}\n` +
+                        `• Local do evento: ${dados.localEvento}\n` +
+                        `• Cidade do evento: ${dados.cidadeEvento}\n` +
+                        `• Local da vistoria: ${dados.localVistoria}\n` +
+                        `• Cidade da vistoria: ${dados.cidadeVistoria}\n` +
+                        `• Natureza: ${dados.natureza}\n` +
+                        `• Manifesto: ${dados.manifesto}\n` +
+                        `• Fatura/N.Fiscal: ${dados.nf}\n` +
+                        `• Mercadoria: ${dados.mercadoria}\n` +
+                        `• Valor declarado: ${dados.valor}\n` +
+                        `• Observação: ${dados.obs}`;
+                    
+                    // Enviar resposta
+                    console.log('📤 [RESPONSE] Enviando resposta para o grupo...');
+                    await sendMessage(fromJid, resposta);
+                    console.log('✅ [RESPONSE] Resposta enviada com SUCESSO!\n');
+                    
+                    // Log do comando
+                    try {
+                        const senderId = msg.key.participant || msg.key.remoteJid;
+                        const senderName = await getUserDisplay(senderId);
+                        logComando('!aviso (PDF)', grupoNome, senderName, true);
+                    } catch (e) {
+                        console.warn('⚠️ Erro ao logar comando:', e.message);
+                    }
+                    
+                    console.log('═══════════════════════════════════════════════');
+                    console.log('✅ PROCESSAMENTO CONCLUÍDO COM SUCESSO');
+                    console.log('═══════════════════════════════════════════════\n');
+                    
+                } catch (error) {
+                    console.error('\n❌ ❌ ❌ ERRO DURANTE PROCESSAMENTO ❌ ❌ ❌');
+                    console.error(`Tipo: ${error.message}`);
+                    console.error(`Stack: ${error.stack}\n`);
+                    
+                    // Enviar mensagem de erro amigável
+                    const msgErro = error.message.includes('TIMEOUT') || error.message.includes('Timeout') ?
+                        `⏱️ *TIMEOUT*\n\nO arquivo demorou muito para processar. Tente novamente com um PDF menor.` :
+                        `❌ *ERRO NA EXTRAÇÃO*\n\nO arquivo pode estar:\n• Protegido por senha\n• Corrompido\n• Sem texto selecionável\n\nDetalhes: ${error.message.substring(0, 50)}...`;
                     
                     try {
-                        console.log('📥 [PDF] Baixando arquivo da mensagem...');
-                        
-                        // Download com timeout
-                        const downloadPromise = client.downloadMedia(msg);
-                        const timeoutPromise = new Promise((_, reject) => 
-                            setTimeout(() => reject(new Error('Timeout no download do arquivo')), 15000)
-                        );
-                        const buffer = await Promise.race([downloadPromise, timeoutPromise]);
-                        
-                        console.log('✅ [PDF] Arquivo baixado:', buffer.length, 'bytes');
-                        
-                        console.log('🔄 [PDF] Parseando PDF...');
-                        const pdfData = await processarPDFComTimeout(buffer, 30000);
-                        
-                        console.log('📊 [PDF] Extraindo dados do texto...');
-                        const dados = extrairDadosAvancado(pdfData.text);
-                        console.log('✅ [PDF] Dados extraídos com sucesso');
-                        
-                        const resposta = 
-                            `✅ *RESUMO DO AVISO GERADO*\n` +
-                            `━━━━━━━━━━━━━━━━━━━━━\n` +
-                            `• Nº sinistro: ${dados.sinistro}\n` +
-                            `• Seguradora: ${dados.seguradora}\n` +
-                            `• Segurado: ${dados.segurado}\n` +
-                            `• Motorista: ${dados.motorista}\n` +
-                            `• Telefone: ${dados.telMotorista}\n` +
-                            `• Placas: ${dados.placas}\n` +
-                            `• Remetente: ${dados.remetente}\n` +
-                            `• Origem: ${dados.origem}\n` +
-                            `• Destinatário: ${dados.destinatario}\n` +
-                            `• Destino: ${dados.destino}\n` +
-                            `• Local do evento: ${dados.localEvento}\n` +
-                            `• Cidade do evento: ${dados.cidadeEvento}\n` +
-                            `• Local da vistoria: ${dados.localVistoria}\n` +
-                            `• Cidade da vistoria: ${dados.cidadeVistoria}\n` +
-                            `• Natureza: ${dados.natureza}\n` +
-                            `• Manifesto: ${dados.manifesto}\n` +
-                            `• Fatura/N.Fiscal: ${dados.nf}\n` +
-                            `• Mercadoria: ${dados.mercadoria}\n` +
-                            `• Valor declarado: ${dados.valor}\n` +
-                            `• Observação: ${dados.obs}`;
-
-                        console.log('📤 [PDF] Enviando resposta...');
-                        await sendMessage(fromJid, resposta);
-                        console.log('✅ [PDF] Resposta enviada com sucesso');
-                        
-                        try {
-                            const senderId = msg.key.participant || msg.key.remoteJid;
-                            const senderName = await getUserDisplay(senderId);
-                            logComando('!aviso (PDF)', grupoNome, senderName, true);
-                        } catch (e) {}
-                        
-                        AGUARDANDO_PDF_AVISO = false;
-                        return;
-
-                    } catch (error) {
-                        console.error('❌ [PDF] Erro ao processar PDF:', error.message);
-                        console.error(error.stack);
-                        
-                        // Resetar flag mesmo em erro
-                        AGUARDANDO_PDF_AVISO = false;
-                        
-                        // Enviar mensagem de erro
-                        const msgErro = error.message.includes('Timeout') ?
-                            `⏱️ *TIMEOUT*\nO processamento do arquivo demorou muito. Por favor, tente novamente.` :
-                            `❌ *FALHA NA EXTRAÇÃO*\nO arquivo não possui texto selecionável, está protegido ou corrompido.\n\nErro: ${error.message}`;
-                        
-                        console.log('📤 [PDF] Enviando mensagem de erro...');
+                        console.log('📤 Enviando mensagem de erro...');
                         await sendMessage(fromJid, msgErro);
-                        
-                        try {
-                            const senderId = msg.key.participant || msg.key.remoteJid;
-                            const senderName = await getUserDisplay(senderId);
-                            logComando('!aviso (PDF)', grupoNome, senderName, false, error.message);
-                        } catch (e) {}
+                        console.log('✅ Mensagem de erro enviada');
+                    } catch (e) {
+                        console.error('❌ Erro ao enviar mensagem de erro:', e.message);
                     }
-                } else {
-                    console.log('⚠️ [PDF] Formato inválido. Enviado:', mimetype);
-                    await sendMessage(fromJid, '⚠️ *Formato Inválido.* Por favor, envie um arquivo PDF.');
-                    AGUARDANDO_PDF_AVISO = false;
+                    
+                    // Log do comando com falha
+                    try {
+                        const senderId = msg.key.participant || msg.key.remoteJid;
+                        const senderName = await getUserDisplay(senderId);
+                        logComando('!aviso (PDF)', grupoNome, senderName, false, error.message.substring(0, 100));
+                    } catch (e) {
+                        console.warn('⚠️ Erro ao logar comando:', e.message);
+                    }
+                    
+                    console.log('═══════════════════════════════════════════════\n');
                 }
-            }
+            })();
+            
             return;
         }
 
