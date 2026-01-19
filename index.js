@@ -60,17 +60,33 @@ async function processarPDF(buffer) {
     console.log('📄 [PDF] Processando PDF...');
     
     try {
+        if (!buffer || buffer.length === 0) {
+            throw new Error('Buffer PDF vazio');
+        }
+        
+        console.log(`📄 [PDF] Tamanho do buffer: ${buffer.length} bytes`);
+        
         const pdfData = await pdfParse(buffer);
         
-        if (!pdfData || !pdfData.text) {
+        if (!pdfData) {
+            throw new Error('PDF_PARSE_RETORNOU_NULL');
+        }
+        
+        console.log(`📄 [PDF] Propriedades retornadas:`, Object.keys(pdfData));
+        console.log(`📄 [PDF] Número de páginas: ${pdfData.numpages || 0}`);
+        
+        if (!pdfData.text || pdfData.text.trim().length === 0) {
+            console.error('❌ [PDF] PDF não contém texto extraível (PDF_SEM_TEXTO)');
             throw new Error('PDF_SEM_TEXTO');
         }
         
         console.log(`✅ [PDF] Texto extraído: ${pdfData.text.length} chars`);
+        console.log(`📄 [PDF] Primeiros 200 chars: ${pdfData.text.substring(0, 200)}`);
         return pdfData.text;
         
     } catch (err) {
-        console.error(`❌ [PDF] Erro: ${err.message}`);
+        console.error(`❌ [PDF] Erro completo:`, err);
+        console.error(`❌ [PDF] Stack:`, err.stack);
         throw err;
     }
 }
@@ -78,12 +94,20 @@ async function processarPDF(buffer) {
 // Detectar tipo e processar arquivo (PDF ou Imagem)
 async function processarArquivo(msg) {
     console.log('📥 [ARQUIVO] Iniciando download...');
+    console.log('📥 [ARQUIVO] Estrutura de msg.message:', Object.keys(msg.message || {}));
     
     try {
         // Download do arquivo
+        console.log('📥 [ARQUIVO] Chamando downloadMedia...');
         const buffer = await client.downloadMedia(msg);
         
-        if (!buffer || buffer.length === 0) {
+        if (!buffer) {
+            console.error('❌ [ARQUIVO] Buffer é null/undefined');
+            throw new Error('DOWNLOAD_VAZIO');
+        }
+        
+        if (buffer.length === 0) {
+            console.error('❌ [ARQUIVO] Buffer tem tamanho 0');
             throw new Error('DOWNLOAD_VAZIO');
         }
         

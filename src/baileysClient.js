@@ -271,11 +271,16 @@ class BaileysClient {
     // Baixar mídia
     async downloadMedia(message) {
         try {
-            const { default: { downloadMediaMessage } } = require('@whiskeysockets/baileys');
+            const { downloadMediaMessage } = require('baileys');
+            console.log('📥 [DOWNLOAD] Iniciando download de mídia...');
             const buffer = await downloadMediaMessage(message, 'buffer', {});
+            if (!buffer) {
+                throw new Error('Buffer vazio retornado do downloadMediaMessage');
+            }
+            console.log(`✅ [DOWNLOAD] Mídia baixada com sucesso: ${buffer.length} bytes`);
             return buffer;
         } catch (error) {
-            console.error('❌ Erro ao baixar mídia:', error);
+            console.error('❌ Erro ao baixar mídia:', error.message);
             throw error;
         }
     }
