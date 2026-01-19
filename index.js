@@ -148,19 +148,31 @@ client.onMessage(async (msg) => {
 
         // --- LEITURA DO PDF (LÓGICA) ---
         if (grupoNome === NOME_GRUPO_AUDITORIA && AGUARDANDO_PDF_AVISO) {
+            console.log('🔍 [DETECTOR] AGUARDANDO_PDF_AVISO = true, verificando mensagem...');
+            console.log('📨 [DETECTOR] Tipo de mensagem:', Object.keys(msg.message || {}));
+            
             if (msg.message?.documentMessage || msg.message?.imageMessage) {
-                const isDocument = msg.message?.documentMessage;
+                const isDocument = !!msg.message?.documentMessage;
                 const mimetype = isDocument ? 
                     msg.message.documentMessage.mimetype : 
                     msg.message.imageMessage?.mimetype;
                 
-                if (mimetype === 'application/pdf') {
+                console.log('📎 [DETECTOR] Tipo de documento:', { isDocument, mimetype });
+                
+                if (mimetype === 'application/pdf' || (isDocument && msg.message?.documentMessage?.fileName?.endsWith('.pdf'))) {
                     console.log('📄 [PDF] Iniciando processamento do PDF...');
                     await sendMessage(fromJid, '⚙️ *Processando arquivo...* Extraindo dados brutos.');
                     
                     try {
                         console.log('📥 [PDF] Baixando arquivo da mensagem...');
-                        const buffer = await client.downloadMedia(msg);
+                        
+                        // Download com timeout
+                        const downloadPromise = client.downloadMedia(msg);
+                        const timeoutPromise = new Promise((_, reject) => 
+                            setTimeout(() => reject(new Error('Timeout no download do arquivo')), 15000)
+                        );
+                        const buffer = await Promise.race([downloadPromise, timeoutPromise]);
+                        
                         console.log('✅ [PDF] Arquivo baixado:', buffer.length, 'bytes');
                         
                         console.log('🔄 [PDF] Parseando PDF...');
