@@ -2,7 +2,9 @@ const BaileysClient = require('./src/baileysClient');
 const path = require('path'); 
 const fs = require('fs');
 const os = require('os');
-const pdfParse = require('pdf-parse'); 
+const pdfParse = require('pdf-parse');
+const Tesseract = require('tesseract.js');
+const sharp = require('sharp'); 
 
 const { ANTI_FLOOD_TIME, NOME_GRUPO_AUDITORIA, VERSAO_BOT, comandosValidos } = require('./src/config');
 const { logPainel, logComando } = require('./src/logger');
@@ -23,21 +25,41 @@ async function getUserDisplay(userId) {
     }
 }
 
-// Processamento simplificado e rápido de PDF
-async function processarPDF(msg) {
-    console.log('📥 [PDF] Iniciando processamento...');
+// Processar imagem com OCR
+async function processarImagem(buffer) {
+    console.log('🖼️ [IMG] Processando imagem com OCR...');
     
     try {
-        // Download direto sem timeout complexo
-        const buffer = await client.downloadMedia(msg);
+        // Otimizar imagem para melhor OCR
+        const imgBuffer = await sharp(buffer)
+            .greyscale()
+            .normalise()
+            .sharpen()
+            .toBuffer();
         
-        if (!buffer || buffer.length === 0) {
-            throw new Error('DOWNLOAD_VAZIO');
+        // OCR com Tesseract
+        const { data: { text } } = await Tesseract.recognize(imgBuffer, 'por', {
+            logger: () => {} // Desabilitar logs do Tesseract
+        });
+        
+        if (!text || text.length < 50) {
+            throw new Error('IMAGEM_SEM_TEXTO');
         }
         
-        console.log(`✅ [PDF] Download: ${buffer.length} bytes`);
+        console.log(`✅ [IMG] OCR concluído: ${text.length} chars`);
+        return text;
         
-        // Parse direto
+    } catch (err) {
+        console.error(`❌ [IMG] Erro: ${err.message}`);
+        throw err;
+    }
+}
+
+// Processar PDF
+async function processarPDF(buffer) {
+    console.log('📄 [PDF] Processando PDF...');
+    
+    try {
         const pdfData = await pdfParse(buffer);
         
         if (!pdfData || !pdfData.text) {
@@ -49,6 +71,47 @@ async function processarPDF(msg) {
         
     } catch (err) {
         console.error(`❌ [PDF] Erro: ${err.message}`);
+        throw err;
+    }
+}
+
+// Detectar tipo e processar arquivo (PDF ou Imagem)
+async function processarArquivo(msg) {
+    console.log('📥 [ARQUIVO] Iniciando download...');
+    
+    try {
+        // Download do arquivo
+        const buffer = await client.downloadMedia(msg);
+        
+        if (!buffer || buffer.length === 0) {
+            throw new Error('DOWNLOAD_VAZIO');
+        }
+        
+        console.log(`✅ [ARQUIVO] Download: ${buffer.length} bytes`);
+        
+        // Detectar tipo de arquivo
+        const msgType = msg.message?.documentMessage || 
+                       msg.message?.imageMessage;
+        
+        const mimetype = msgType?.mimetype || '';
+        const filename = msgType?.fileName || '';
+        
+        console.log(`🔍 [ARQUIVO] Tipo detectado: ${mimetype}`);
+        
+        // Processar conforme o tipo
+        let texto;
+        if (mimetype === 'application/pdf' || filename.toLowerCase().endsWith('.pdf')) {
+            texto = await processarPDF(buffer);
+        } else if (mimetype.startsWith('image/') || /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(filename)) {
+            texto = await processarImagem(buffer);
+        } else {
+            throw new Error('TIPO_NAO_SUPORTADO');
+        }
+        
+        return texto;
+        
+    } catch (err) {
+        console.error(`❌ [ARQUIVO] Erro: ${err.message}`);
         throw err;
     }
 }
@@ -144,45 +207,50 @@ client.onMessage(async (msg) => {
 
         // --- LEITURA DO PDF (LÓGICA) ---
         if (grupoNome === NOME_GRUPO_AUDITORIA && AGUARDANDO_PDF_AVISO) {
-            console.log('🔍 [DETECTOR] AGUARDANDO_PDF_AVISO = true, verificando mensagem...');
-            console.log('📨 [DETECTOR] Tipo de mensagem:', Object.keys(msg.message || {}));
+            console.log('🔍 [DETECTOR] Aguardando arquivo...');
+            console.log('📨 [DETECTOR] Tipo:', Object.keys(msg.message || {}));
             
-            const isPDF = msg.message?.documentMessage && 
-                         (msg.message?.documentMessage?.mimetype === 'application/pdf' || 
-                          msg.message?.documentMessage?.fileName?.toLowerCase().endsWith('.pdf'));
+            // Aceitar PDF ou imagem
+            const docMsg = msg.message?.documentMessage;
+            const imgMsg = msg.message?.imageMessage;
             
-            if (!isPDF) {
-                console.log('⚠️ [DETECTOR] Não é PDF. Ignorando...');
+            const isArquivoValido = 
+                (docMsg && (docMsg.mimetype === 'application/pdf' || docMsg.fileName?.toLowerCase().endsWith('.pdf'))) ||
+                (imgMsg && imgMsg.mimetype?.startsWith('image/'));
+            
+            if (!isArquivoValido) {
+                console.log('⚠️ [DETECTOR] Não é PDF nem imagem. Ignorando...');
                 return;
             }
             
-            console.log('📄 [PDF] Arquivo PDF detectado! Iniciando processamento...');
+            const tipoArquivo = docMsg ? 'PDF' : 'Imagem';
+            console.log(`📄 [${tipoArquivo}] Arquivo detectado! Processando...`);
             
             // Resetar flag IMEDIATAMENTE para evitar duplicatas
             AGUARDANDO_PDF_AVISO = false;
             
             // Enviar mensagem de processamento
             try {
-                await sendMessage(fromJid, '⚙️ *Processando arquivo PDF...*\n\nIsso pode levar alguns segundos. Aguarde...');
+                await sendMessage(fromJid, `⚙️ *Processando ${tipoArquivo}...*\n\nAguarde alguns segundos...`);
             } catch (e) {
-                console.error('❌ Erro ao enviar mensagem de processamento:', e.message);
+                console.error('❌ Erro ao enviar msg:', e.message);
             }
             
-            // Processar PDF de forma otimizada
-            (async () => {
+            // Processar arquivo (PDF ou Imagem)
+            setImmediate(async () => {
                 try {
-                    console.log('🚀 [PDF] Processando arquivo...');
+                    console.log('🚀 [PROCESSO] Iniciando...');
                     
-                    // Processar PDF (download + parse)
-                    const textoExtraido = await processarPDF(msg);
+                    // Processar arquivo (detecta tipo automaticamente)
+                    const textoExtraido = await processarArquivo(msg);
                     
-                    // Extrair dados de forma síncrona
-                    console.log('📊 [PDF] Extraindo dados...');
+                    // Extrair dados
+                    console.log('📊 [DADOS] Extraindo...');
                     const dados = extrairDadosAvancado(textoExtraido);
-                    console.log('✅ [PDF] Dados extraídos');
+                    console.log('✅ [DADOS] Extraídos');
                     
                     // Construir resposta
-                    console.log('\n📝 [RESPONSE] Construindo resposta...');
+                    console.log('📝 [RESPOSTA] Montando...');
                     const resposta = 
                         `✅ *RESUMO DO AVISO EXTRAÍDO*\n` +
                         `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
@@ -208,31 +276,31 @@ client.onMessage(async (msg) => {
                         `• Observação: ${dados.obs}`;
                     
                     // Enviar resposta
-                    console.log('📤 [RESPONSE] Enviando resposta para o grupo...');
+                    console.log('📤 [ENVIO] Enviando...');
                     await sendMessage(fromJid, resposta);
-                    console.log('✅ [PDF] Resposta enviada!\n');
+                    console.log('✅ [CONCLUÍDO] Sucesso!\n');
                     
                     // Log do comando
                     try {
                         const senderId = msg.key.participant || msg.key.remoteJid;
                         const senderName = await getUserDisplay(senderId);
-                        logComando('!aviso (PDF)', grupoNome, senderName, true);
-                    } catch (e) {
-                        console.warn('⚠️ Erro ao logar comando:', e.message);
-                    }
+                        logComando('!aviso (arquivo)', grupoNome, senderName, true);
+                    } catch (e) {}
                     
                 } catch (error) {
-                    console.error('❌ [PDF] Erro:', error.message);
+                    console.error('❌ [ERRO]:', error.message);
                     
                     // Mensagem de erro simplificada
-                    let msgErro = '❌ *ERRO AO PROCESSAR PDF*\n\n';
+                    let msgErro = '❌ *ERRO AO PROCESSAR ARQUIVO*\n\n';
                     
                     if (error.message.includes('DOWNLOAD_VAZIO')) {
-                        msgErro += 'Não foi possível baixar o arquivo. Tente novamente.';
-                    } else if (error.message.includes('PDF_SEM_TEXTO')) {
-                        msgErro += 'PDF sem texto legível. Pode estar protegido ou ser apenas imagens.';
+                        msgErro += 'Não foi possível baixar o arquivo.';
+                    } else if (error.message.includes('PDF_SEM_TEXTO') || error.message.includes('IMAGEM_SEM_TEXTO')) {
+                        msgErro += 'Arquivo sem texto legível. Envie uma imagem mais clara ou PDF com texto selecionável.';
+                    } else if (error.message.includes('TIPO_NAO_SUPORTADO')) {
+                        msgErro += 'Formato não suportado. Envie apenas PDF ou imagens (JPG, PNG).';
                     } else {
-                        msgErro += 'Erro no processamento. Verifique se o arquivo está correto.';
+                        msgErro += 'Erro no processamento. Tente novamente.';
                     }
                     
                     try {
@@ -245,10 +313,10 @@ client.onMessage(async (msg) => {
                     try {
                         const senderId = msg.key.participant || msg.key.remoteJid;
                         const senderName = await getUserDisplay(senderId);
-                        logComando('!aviso (PDF)', grupoNome, senderName, false, error.message);
+                        logComando('!aviso (arquivo)', grupoNome, senderName, false, error.message);
                     } catch (e) {}
                 }
-            })();
+            });
             
             return;
         }
@@ -258,7 +326,7 @@ client.onMessage(async (msg) => {
         // Ativa a espera do PDF
         if (textoRecebido === '!aviso' && grupoNome === NOME_GRUPO_AUDITORIA) {
             AGUARDANDO_PDF_AVISO = true;
-            await sendMessage(fromJid, '📄 *IMPORTAÇÃO DE AVISO*\n\nO sistema está aguardando o arquivo.\n👉 *Envie o PDF do Aviso agora.*');
+            await sendMessage(fromJid, '📄 *IMPORTAÇÃO DE AVISO*\n\nO sistema está aguardando o arquivo.\n👉 *Envie o PDF ou imagem do Aviso agora.*');
             
             try {
                 const userId = msg.key.participant || msg.key.remoteJid;
@@ -299,12 +367,12 @@ client.onMessage(async (msg) => {
                 `🔸 *!atencao*  → Envia cobrança formal de prazo (24h).\n` +
                 `🔸 *!status*  → Exibe painel técnico de saúde do servidor.\n` +
                 `🔸 *!buscar* [termo]  → Busca nos logs por comandos/usuários.\n\n` +
-                `📄 *IMPORTADOR DE AVISO (PDF)*\n` +
+                `📄 *IMPORTADOR DE AVISO (PDF/IMAGEM)*\n` +
                 `_Funcionalidade exclusiva do grupo ${NOME_GRUPO_AUDITORIA}_\n` +
                 `1️⃣ Digite *!aviso*\n` +
                 `2️⃣ O bot pedirá o arquivo.\n` +
-                `3️⃣ Arraste o PDF do aviso para a conversa.\n` +
-                `4️⃣ O bot lerá e extrairá os dados formatados.`;
+                `3️⃣ Envie o PDF ou foto do aviso.\n` +
+                `4️⃣ O bot extrairá os dados automaticamente.`;
                 
             await sendMessage(fromJid, textoMenu);
         }
