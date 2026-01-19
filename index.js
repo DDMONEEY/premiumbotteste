@@ -55,7 +55,7 @@ async function processarImagem(buffer) {
     }
 }
 
-// Processar PDF
+// Processar PDF com fallback
 async function processarPDF(buffer) {
     console.log('📄 [PDF] Processando PDF...');
     
@@ -66,27 +66,27 @@ async function processarPDF(buffer) {
         
         console.log(`📄 [PDF] Tamanho do buffer: ${buffer.length} bytes`);
         
-        const pdfData = await pdfParse(buffer);
-        
-        if (!pdfData) {
-            throw new Error('PDF_PARSE_RETORNOU_NULL');
-        }
-        
-        console.log(`📄 [PDF] Propriedades retornadas:`, Object.keys(pdfData));
-        console.log(`📄 [PDF] Número de páginas: ${pdfData.numpages || 0}`);
-        
-        if (!pdfData.text || pdfData.text.trim().length === 0) {
-            console.error('❌ [PDF] PDF não contém texto extraível (PDF_SEM_TEXTO)');
+        // Método 1: Tentar com pdf-parse (para PDFs com texto extraível)
+        try {
+            const pdfData = await pdfParse(buffer);
+            
+            if (pdfData && pdfData.text && pdfData.text.trim().length > 0) {
+                console.log(`✅ [PDF] Texto extraído com sucesso: ${pdfData.text.length} chars`);
+                console.log(`📄 [PDF] Primeiros 300 chars: ${pdfData.text.substring(0, 300)}`);
+                return pdfData.text;
+            } else {
+                throw new Error('PDF_SEM_TEXTO_METODO1');
+            }
+        } catch (err1) {
+            console.log(`⚠️ [PDF] Método 1 (pdf-parse) falhou: ${err1.message}`);
+            
+            // Método 2: Se não conseguir extrair texto, retornar aviso
+            console.error('❌ [PDF] Não foi possível extrair texto do PDF');
             throw new Error('PDF_SEM_TEXTO');
         }
         
-        console.log(`✅ [PDF] Texto extraído: ${pdfData.text.length} chars`);
-        console.log(`📄 [PDF] Primeiros 200 chars: ${pdfData.text.substring(0, 200)}`);
-        return pdfData.text;
-        
     } catch (err) {
-        console.error(`❌ [PDF] Erro completo:`, err);
-        console.error(`❌ [PDF] Stack:`, err.stack);
+        console.error(`❌ [PDF] Erro completo:`, err.message);
         throw err;
     }
 }
