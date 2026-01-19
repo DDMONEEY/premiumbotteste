@@ -23,68 +23,32 @@ async function getUserDisplay(userId) {
     }
 }
 
-// WRAPPER DE TIMEOUT ROBUSTO - Garante que tudo SEMPRE termina dentro do tempo limite
-async function withTimeout(promise, ms, operacao) {
-    console.log(`⏱️ [TIMEOUT] Iniciando "${operacao}" com limite de ${ms}ms...`);
-    
-    return Promise.race([
-        promise,
-        new Promise((_, reject) => {
-            const timer = setTimeout(() => {
-                console.error(`❌ [TIMEOUT] "${operacao}" EXPIROU após ${ms}ms!`);
-                reject(new Error(`TIMEOUT: ${operacao} levou mais de ${ms}ms`));
-            }, ms);
-            
-            // Cleanup automático
-            promise
-                .then(() => clearTimeout(timer))
-                .catch(() => clearTimeout(timer));
-        })
-    ]);
-}
-
-// Função para fazer download com timeout RIGOROSO
-async function downloadPDFComTimeout(msg, timeoutMs = 10000) {
-    console.log('📥 [DOWNLOAD] Iniciando download do arquivo...');
+// Processamento simplificado e rápido de PDF
+async function processarPDF(msg) {
+    console.log('📥 [PDF] Iniciando processamento...');
     
     try {
-        const buffer = await withTimeout(
-            client.downloadMedia(msg),
-            timeoutMs,
-            'download de arquivo'
-        );
+        // Download direto sem timeout complexo
+        const buffer = await client.downloadMedia(msg);
         
         if (!buffer || buffer.length === 0) {
-            throw new Error('Buffer vazio após download');
+            throw new Error('DOWNLOAD_VAZIO');
         }
         
-        console.log(`✅ [DOWNLOAD] Arquivo baixado com sucesso: ${buffer.length} bytes`);
-        return buffer;
-    } catch (err) {
-        console.error(`❌ [DOWNLOAD] Erro no download: ${err.message}`);
-        throw err;
-    }
-}
-
-// Função para parsear PDF com timeout RIGOROSO
-async function parsearPDFComTimeout(buffer, timeoutMs = 15000) {
-    console.log('🔄 [PARSE] Iniciando parse do PDF...');
-    
-    try {
-        const pdfData = await withTimeout(
-            pdfParse(buffer),
-            timeoutMs,
-            'parse do PDF'
-        );
+        console.log(`✅ [PDF] Download: ${buffer.length} bytes`);
+        
+        // Parse direto
+        const pdfData = await pdfParse(buffer);
         
         if (!pdfData || !pdfData.text) {
-            throw new Error('PDF não contém texto ou dados inválidos');
+            throw new Error('PDF_SEM_TEXTO');
         }
         
-        console.log(`✅ [PARSE] PDF parseado com sucesso: ${pdfData.text.length} caracteres`);
-        return pdfData;
+        console.log(`✅ [PDF] Texto extraído: ${pdfData.text.length} chars`);
+        return pdfData.text;
+        
     } catch (err) {
-        console.error(`❌ [PARSE] Erro no parse: ${err.message}`);
+        console.error(`❌ [PDF] Erro: ${err.message}`);
         throw err;
     }
 }
@@ -204,41 +168,18 @@ client.onMessage(async (msg) => {
                 console.error('❌ Erro ao enviar mensagem de processamento:', e.message);
             }
             
-            // Processar PDF em paralelo (não bloqueia retorno ao usuário)
+            // Processar PDF de forma otimizada
             (async () => {
                 try {
-                    console.log('\n═══════════════════════════════════════════════');
-                    console.log('🚀 INICIANDO PROCESSAMENTO DE PDF');
-                    console.log('═══════════════════════════════════════════════\n');
+                    console.log('🚀 [PDF] Processando arquivo...');
                     
-                    // ETAPA 1: Download com timeout rigoroso
-                    let buffer;
-                    try {
-                        console.log('ETAPA 1/3: Download do arquivo');
-                        buffer = await downloadPDFComTimeout(msg, 10000);
-                    } catch (err) {
-                        throw new Error(`DOWNLOAD: ${err.message}`);
-                    }
+                    // Processar PDF (download + parse)
+                    const textoExtraido = await processarPDF(msg);
                     
-                    // ETAPA 2: Parse com timeout rigoroso
-                    let pdfData;
-                    try {
-                        console.log('\nETAPA 2/3: Parse do PDF');
-                        pdfData = await parsearPDFComTimeout(buffer, 15000);
-                    } catch (err) {
-                        throw new Error(`PARSE: ${err.message}`);
-                    }
-                    
-                    // ETAPA 3: Extração de dados
-                    let dados;
-                    try {
-                        console.log('\nETAPA 3/3: Extração de dados');
-                        console.log('📊 [EXTRACT] Chamando extrairDadosAvancado...');
-                        dados = extrairDadosAvancado(pdfData.text);
-                        console.log('✅ [EXTRACT] Dados extraídos com sucesso');
-                    } catch (err) {
-                        throw new Error(`EXTRAÇÃO: ${err.message}`);
-                    }
+                    // Extrair dados de forma síncrona
+                    console.log('📊 [PDF] Extraindo dados...');
+                    const dados = extrairDadosAvancado(textoExtraido);
+                    console.log('✅ [PDF] Dados extraídos');
                     
                     // Construir resposta
                     console.log('\n📝 [RESPONSE] Construindo resposta...');
@@ -269,7 +210,7 @@ client.onMessage(async (msg) => {
                     // Enviar resposta
                     console.log('📤 [RESPONSE] Enviando resposta para o grupo...');
                     await sendMessage(fromJid, resposta);
-                    console.log('✅ [RESPONSE] Resposta enviada com SUCESSO!\n');
+                    console.log('✅ [PDF] Resposta enviada!\n');
                     
                     // Log do comando
                     try {
@@ -280,38 +221,32 @@ client.onMessage(async (msg) => {
                         console.warn('⚠️ Erro ao logar comando:', e.message);
                     }
                     
-                    console.log('═══════════════════════════════════════════════');
-                    console.log('✅ PROCESSAMENTO CONCLUÍDO COM SUCESSO');
-                    console.log('═══════════════════════════════════════════════\n');
-                    
                 } catch (error) {
-                    console.error('\n❌ ❌ ❌ ERRO DURANTE PROCESSAMENTO ❌ ❌ ❌');
-                    console.error(`Tipo: ${error.message}`);
-                    console.error(`Stack: ${error.stack}\n`);
+                    console.error('❌ [PDF] Erro:', error.message);
                     
-                    // Enviar mensagem de erro amigável
-                    const msgErro = error.message.includes('TIMEOUT') || error.message.includes('Timeout') ?
-                        `⏱️ *TIMEOUT*\n\nO arquivo demorou muito para processar. Tente novamente com um PDF menor.` :
-                        `❌ *ERRO NA EXTRAÇÃO*\n\nO arquivo pode estar:\n• Protegido por senha\n• Corrompido\n• Sem texto selecionável\n\nDetalhes: ${error.message.substring(0, 50)}...`;
+                    // Mensagem de erro simplificada
+                    let msgErro = '❌ *ERRO AO PROCESSAR PDF*\n\n';
                     
-                    try {
-                        console.log('📤 Enviando mensagem de erro...');
-                        await sendMessage(fromJid, msgErro);
-                        console.log('✅ Mensagem de erro enviada');
-                    } catch (e) {
-                        console.error('❌ Erro ao enviar mensagem de erro:', e.message);
+                    if (error.message.includes('DOWNLOAD_VAZIO')) {
+                        msgErro += 'Não foi possível baixar o arquivo. Tente novamente.';
+                    } else if (error.message.includes('PDF_SEM_TEXTO')) {
+                        msgErro += 'PDF sem texto legível. Pode estar protegido ou ser apenas imagens.';
+                    } else {
+                        msgErro += 'Erro no processamento. Verifique se o arquivo está correto.';
                     }
                     
-                    // Log do comando com falha
+                    try {
+                        await sendMessage(fromJid, msgErro);
+                    } catch (e) {
+                        console.error('❌ Erro ao enviar erro:', e.message);
+                    }
+                    
+                    // Log de falha
                     try {
                         const senderId = msg.key.participant || msg.key.remoteJid;
                         const senderName = await getUserDisplay(senderId);
-                        logComando('!aviso (PDF)', grupoNome, senderName, false, error.message.substring(0, 100));
-                    } catch (e) {
-                        console.warn('⚠️ Erro ao logar comando:', e.message);
-                    }
-                    
-                    console.log('═══════════════════════════════════════════════\n');
+                        logComando('!aviso (PDF)', grupoNome, senderName, false, error.message);
+                    } catch (e) {}
                 }
             })();
             
