@@ -14,7 +14,8 @@
   "dependencies": {
     "axios": "^1.13.2",
     "baileys": "^6.3.0",
-    "pdf-extraction": "^1.0.2",
+    "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "^5.4.530",
     "pino": "^8.19.0",
     "pino-pretty": "^10.2.0",
     "qrcode": "^1.5.3",

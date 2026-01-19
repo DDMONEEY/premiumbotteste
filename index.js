@@ -2,7 +2,7 @@ const BaileysClient = require('./src/baileysClient');
 const path = require('path'); 
 const fs = require('fs');
 const os = require('os');
-const pdf = require('pdf-extraction'); 
+const pdfParse = require('pdf-parse'); 
 
 const { ANTI_FLOOD_TIME, NOME_GRUPO_AUDITORIA, VERSAO_BOT, comandosValidos } = require('./src/config');
 const { logPainel, logComando } = require('./src/logger');
@@ -125,8 +125,18 @@ client.onMessage(async (msg) => {
                     
                     try {
                         const buffer = await client.downloadMedia(msg);
-                        const data = await pdf(buffer);
-                        const dados = extrairDadosAvancado(data.text);
+                        
+                        // Adicionar timeout de 30 segundos
+                        const timeoutPromise = new Promise((_, reject) => 
+                            setTimeout(() => reject(new Error('Timeout ao processar PDF')), 30000)
+                        );
+                        
+                        const pdfData = await Promise.race([
+                            pdfParse(buffer),
+                            timeoutPromise
+                        ]);
+                        
+                        const dados = extrairDadosAvancado(pdfData.text);
                         
                         const resposta = 
                             `✅ *RESUMO DO AVISO GERADO*\n` +
@@ -164,16 +174,23 @@ client.onMessage(async (msg) => {
                         return;
 
                     } catch (error) {
-                        console.error(error);
-                        await sendMessage(fromJid, `❌ *FALHA NA EXTRAÇÃO*\nO arquivo não possui texto selecionável ou está protegido.`);
+                        console.error('❌ Erro ao processar PDF:', error.message);
+                        
+                        // Resetar flag mesmo em erro
+                        AGUARDANDO_PDF_AVISO = false;
+                        
+                        // Enviar mensagem de erro
+                        const msgErro = error.message.includes('Timeout') ?
+                            `⏱️ *TIMEOUT*\nO processamento do arquivo demorou muito. Por favor, tente novamente.` :
+                            `❌ *FALHA NA EXTRAÇÃO*\nO arquivo não possui texto selecionável, está protegido ou corrompido.\n\nErro: ${error.message}`;
+                        
+                        await sendMessage(fromJid, msgErro);
                         
                         try {
                             const senderId = msg.key.participant || msg.key.remoteJid;
                             const senderName = await getUserDisplay(senderId);
-                            logComando('!aviso (PDF)', grupoNome, senderName, true, 'Falha extração');
+                            logComando('!aviso (PDF)', grupoNome, senderName, false, error.message);
                         } catch (e) {}
-                        
-                        AGUARDANDO_PDF_AVISO = false;
                     }
                 } else {
                     await sendMessage(fromJid, '⚠️ *Formato Inválido.* Por favor, envie um arquivo PDF.');
