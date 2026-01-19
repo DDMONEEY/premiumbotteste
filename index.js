@@ -89,14 +89,18 @@ async function processarArquivo(msg) {
         
         console.log(`✅ [ARQUIVO] Download: ${buffer.length} bytes`);
         
-        // Detectar tipo de arquivo
-        const msgType = msg.message?.documentMessage || 
-                       msg.message?.imageMessage;
+        // Detectar tipo de arquivo - verificar múltiplas estruturas possíveis
+        const docMsg = msg.message?.documentMessage || 
+                       msg.message?.documentWithCaptionMessage?.message?.documentMessage;
+        const imgMsg = msg.message?.imageMessage;
+        
+        const msgType = docMsg || imgMsg;
         
         const mimetype = msgType?.mimetype || '';
         const filename = msgType?.fileName || '';
         
         console.log(`🔍 [ARQUIVO] Tipo detectado: ${mimetype}`);
+        console.log(`📝 [ARQUIVO] Nome do arquivo: ${filename}`);
         
         // Processar conforme o tipo
         let texto;
@@ -209,10 +213,19 @@ client.onMessage(async (msg) => {
         if (grupoNome === NOME_GRUPO_AUDITORIA && AGUARDANDO_PDF_AVISO) {
             console.log('🔍 [DETECTOR] Aguardando arquivo...');
             console.log('📨 [DETECTOR] Tipo:', Object.keys(msg.message || {}));
+            console.log('📨 [DETECTOR] Mensagem completa:', JSON.stringify(msg, null, 2));
             
-            // Aceitar PDF ou imagem
-            const docMsg = msg.message?.documentMessage;
+            // Aceitar PDF ou imagem - verificar múltiplas estruturas
+            const docMsg = msg.message?.documentMessage || msg.message?.documentWithCaptionMessage?.message?.documentMessage;
             const imgMsg = msg.message?.imageMessage;
+            
+            console.log('📄 [DEBUG] docMsg:', docMsg ? 'ENCONTRADO' : 'NULL');
+            console.log('🖼️ [DEBUG] imgMsg:', imgMsg ? 'ENCONTRADO' : 'NULL');
+            
+            if (docMsg) {
+                console.log('📋 [DEBUG] MimeType:', docMsg.mimetype);
+                console.log('📋 [DEBUG] FileName:', docMsg.fileName);
+            }
             
             const isArquivoValido = 
                 (docMsg && (docMsg.mimetype === 'application/pdf' || docMsg.fileName?.toLowerCase().endsWith('.pdf'))) ||
