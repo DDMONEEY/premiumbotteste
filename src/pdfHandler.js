@@ -25,7 +25,15 @@ function extrairDadosAvancado(texto) {
             try {
                 const match = regex.exec(textoLimpo);
                 if (match && match[1]) {
-                    const resultado = match[1].replace(/\n/g, ' ').trim();
+                    // Apenas remover quebras de linha EXCESSIVAS, manter a estrutura
+                    let resultado = match[1]
+                        .replace(/\n\n+/g, ' ') // Remover múltiplas quebras
+                        .replace(/\n/g, ' ')    // Quebras simples viram espaço
+                        .trim();
+                    
+                    // Limpar múltiplos espaços
+                    resultado = resultado.replace(/\s+/g, ' ');
+                    
                     console.log(`✓ [pdfHandler] Encontrado: ${regex.source.substring(0, 50)} = "${resultado.substring(0, 50)}"`);
                     return resultado;
                 }
