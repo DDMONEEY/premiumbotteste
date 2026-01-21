@@ -224,7 +224,9 @@ function extrairCamposLista(textoBruto) {
             '|DESTINAT[ÁA]RIO' +
             '|DESTINO' +
             '|LOCAL\\s+DO\\s+EVENTO' +
+            '|CIDADE(?:\\s+DO\\s+EVENTO)?' +
             '|LOCAL\\s+DA\\s+VISTORIA' +
+            '|CIDADE(?:\\s+DA\\s+VISTORIA)?' +
             '|NATUREZA' +
             '|MANIFESTO(?:\\s*N[º°])?' +
             '|FATURA\\/?N\\.?FISCAL' +
