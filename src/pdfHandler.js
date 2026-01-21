@@ -256,15 +256,40 @@ function extrairCamposLista(textoBruto) {
         } = opcoes;
         
         try {
-            // Monta o regex: captura até encontrar outro label ou fim do texto
-            const regex = new RegExp(
+            // PADRÃO 1: Formato texto normal "LABEL: valor"
+            const regexTexto = new RegExp(
                 `(?:^|\\n)\\s*(?:${labelPattern})\\s*[:\\-]\\s*([\\s\\S]*?)(?=\\n\\s*(?:${TODOS_LABELS})\\s*[:\\-]|$)`,
                 'i'
             );
             
-            const match = regex.exec(textoCompleto);
+            // PADRÃO 2: Formato tabular "LABEL valor" (sem dois pontos, separado por espaços)
+            const regexTabular = new RegExp(
+                `(?:^|\\n)\\s*(?:${labelPattern})\\s*[:\\-]?\\s+([^\\n]+)`,
+                'i'
+            );
             
-            if (!match || !match[1]) {
+            // PADRÃO 3: Formato com quebra de linha (label em uma linha, valor na próxima)
+            const regexQuebraLinha = new RegExp(
+                `(?:^|\\n)\\s*(?:${labelPattern})\\s*[:\\-]?\\s*\\n\\s*([^\\n]+)`,
+                'i'
+            );
+            
+            let match = regexTexto.exec(textoCompleto);
+            let metodo = 'texto';
+            
+            // Se não encontrou com padrão texto, tenta tabular
+            if (!match || !match[1] || match[1].trim().length === 0) {
+                match = regexTabular.exec(textoCompleto);
+                metodo = 'tabular';
+            }
+            
+            // Se ainda não encontrou, tenta com quebra de linha
+            if (!match || !match[1] || match[1].trim().length === 0) {
+                match = regexQuebraLinha.exec(textoCompleto);
+                metodo = 'quebra-linha';
+            }
+            
+            if (!match || !match[1] || match[1].trim().length === 0) {
                 console.log(`⚠️ [EXTRAÇÃO] Campo não encontrado: ${labelPattern.substring(0, 30)}`);
                 return '--';
             }
@@ -279,12 +304,15 @@ function extrairCamposLista(textoBruto) {
             // Limpar espaços múltiplos
             valor = valor.replace(/\s+/g, ' ');
             
+            // Remover lixo comum de PDFs tabulares
+            valor = valor.replace(/^[:\-\s]+/, '').trim();
+            
             // Aplicar limite de caracteres se especificado
             if (limiteCaracteres && valor.length > limiteCaracteres) {
                 valor = valor.substring(0, limiteCaracteres) + '...';
             }
             
-            console.log(`✅ [EXTRAÇÃO] ${labelPattern.substring(0, 20)}: "${valor.substring(0, 50)}${valor.length > 50 ? '...' : ''}"`);
+            console.log(`✅ [EXTRAÇÃO] ${labelPattern.substring(0, 20)} (${metodo}): "${valor.substring(0, 50)}${valor.length > 50 ? '...' : ''}"`);
             
             return valor || '--';
             
@@ -340,8 +368,8 @@ function extrairCamposLista(textoBruto) {
     
     const dadosExtraidos = {
         sinistro: extrairCampo('N[º°]\\s*SINISTRO(?:\\s*\\(SEC\\))?', { somenteLinhaAtual: true }),
-        seguradora: extrairCampo('SEGURADORA', { somenteLinhaAtual: true }),
-        segurado: extrairCampo('SEGURADO', { somenteLinhaAtual: true }),
+        seguradora: extrairCampo('(?:N[º°]\\s*)?SEGURADORA', { somenteLinhaAtual: true }),
+        segurado: extrairCampo('(?:N[º°]\\s*)?SEGURADO', { somenteLinhaAtual: true }),
         motorista: extrairCampo('MOTORISTA', { somenteLinhaAtual: true }),
         telefone: extrairCampo('TELEFONE', { somenteLinhaAtual: true }),
         placas: extrairCampo('PLACAS?', { somenteLinhaAtual: true }),
@@ -355,9 +383,9 @@ function extrairCamposLista(textoBruto) {
         cidadeVistoria: extrairCidadeVistoria(),
         natureza: extrairCampo('NATUREZA', { somenteLinhaAtual: true }),
         manifesto: extrairCampo('MANIFESTO(?:\\s*N[º°])?', { somenteLinhaAtual: true }),
-        fatura: extrairCampo('FATURA\\/?N\\.?FISCAL', { somenteLinhaAtual: true }),
+        fatura: extrairCampo('FATURA\\/?N\\.?FISCAL|FATURA\\/NR\\.?N\\.?FISCAL', { somenteLinhaAtual: true }),
         mercadoria: extrairCampo('MERCADORIA', { somenteLinhaAtual: true }),
-        valorDeclarado: extrairCampo('VALOR\\s+DECLARADO', { somenteLinhaAtual: true }),
+        valorDeclarado: extrairCampo('VALOR\\s+(?:NA\\s+)?DECLARADO|VALOR\\s+DECLARADO\\s+NA\\s+CARGA', { somenteLinhaAtual: true }),
         observacao: extrairCampo('OBSERVA[ÇC][ÃA]O|OBSERVA[ÇC][ÕO]ES', { limiteCaracteres: 500 })
     };
     
