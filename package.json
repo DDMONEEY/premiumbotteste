@@ -17,7 +17,7 @@
     "csv-parser": "^3.2.0",
     "mammoth": "^1.11.0",
     "pdf2pic": "^3.2.0",
-    "pdfjs-dist": "^5.4.530",
+    "pdfjs-dist": "^3.11.174",
     "pino": "^8.19.0",
     "pino-pretty": "^10.2.0",
     "qrcode": "^1.5.3",
