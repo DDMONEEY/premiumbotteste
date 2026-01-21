@@ -77,8 +77,7 @@ async function processarPDF(buffer) {
             // Carregar o PDF - converter Buffer para Uint8Array
             const uint8Array = new Uint8Array(buffer);
             const pdf = await pdfjs.getDocument({ 
-                data: uint8Array,
-                standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@2.16.105/standard_fonts/'
+                data: uint8Array
             }).promise;
             let textoCompleto = '';
             
