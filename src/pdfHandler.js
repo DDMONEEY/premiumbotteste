@@ -19,8 +19,7 @@ function extrairDadosAvancado(texto) {
         'Nº SINISTRO', 'SEGURADORA', 'SEGURADO', 'MOTORISTA', 'TELEFONE', 'PLACAS',
         'REMETENTE', 'ORIGEM', 'DESTINATÁRIO', 'DESTINO', 'LOCAL DO EVENTO',
         'CIDADE DO EVENTO', 'LOCAL DA VISTORIA', 'CIDADE DA VISTORIA', 'NATUREZA',
-        'MANIFESTO', 'FATURA\/N\.FISCAL', 'MERCADORIA', 'VALOR DECLARADO', 'OBSERVAÇÃO',
-        'CIDADE', 'DATA', 'HORA'
+        'MANIFESTO', 'FATURA\/N\.FISCAL', 'MERCADORIA', 'VALOR DECLARADO', 'OBSERVAÇÃO'
     ];
     const labelsRegex = new RegExp(`(?:^|\s)(${labels.join('|')}):`, 'gi');
     textoLimpo = textoLimpo.replace(labelsRegex, '\n$1:');
