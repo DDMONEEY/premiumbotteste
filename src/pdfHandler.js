@@ -256,38 +256,14 @@ function extrairCamposLista(textoBruto) {
         } = opcoes;
         
         try {
-            // PADRÃO 1: Formato texto normal "LABEL: valor"
-            const regexTexto = new RegExp(
-                `(?:^|\\n)\\s*(?:${labelPattern})\\s*[:\\-]\\s*([\\s\\S]*?)(?=\\n\\s*(?:${TODOS_LABELS})\\s*[:\\-]|$)`,
+            // PADRÃO UNIVERSAL: Captura valor após label até encontrar outro label conhecido
+            // Funciona para: texto linear, tabular, com quebras de linha
+            const regex = new RegExp(
+                `(?:${labelPattern})\\s*[:\\-]?\\s*([^\\n]*?)(?=\\s*(?:N[º°]\\s*SEGURAD|N[º°]\\s*SINISTRO|SEGURADORA|TELEFONE|PLACAS?|REMETENTE|ORIGEM|DESTINAT|DESTINO|LOCAL\\s+D|NATUREZA|MANIFESTO|FATURA|MERCADORIA|VALOR|OBSERVA|MODALIDADE|REF\\.|APÓLICE|CPFCNPJ|CONTATO|CORRETOR|TRANSPORTADOR|MOTORISTA|VEÍCULO|REMETENTE|DANOS|DATA\\s+D|EMAIL|BOLETIM|GERENCIADORA|EMPRESA|ANALISE|COMUNICADO|NOME:|PRESTADOR|$)|$)`,
                 'i'
             );
             
-            // PADRÃO 2: Formato tabular "LABEL valor" (sem dois pontos, separado por espaços)
-            const regexTabular = new RegExp(
-                `(?:^|\\n)\\s*(?:${labelPattern})\\s*[:\\-]?\\s+([^\\n]+)`,
-                'i'
-            );
-            
-            // PADRÃO 3: Formato com quebra de linha (label em uma linha, valor na próxima)
-            const regexQuebraLinha = new RegExp(
-                `(?:^|\\n)\\s*(?:${labelPattern})\\s*[:\\-]?\\s*\\n\\s*([^\\n]+)`,
-                'i'
-            );
-            
-            let match = regexTexto.exec(textoCompleto);
-            let metodo = 'texto';
-            
-            // Se não encontrou com padrão texto, tenta tabular
-            if (!match || !match[1] || match[1].trim().length === 0) {
-                match = regexTabular.exec(textoCompleto);
-                metodo = 'tabular';
-            }
-            
-            // Se ainda não encontrou, tenta com quebra de linha
-            if (!match || !match[1] || match[1].trim().length === 0) {
-                match = regexQuebraLinha.exec(textoCompleto);
-                metodo = 'quebra-linha';
-            }
+            const match = regex.exec(textoCompleto);
             
             if (!match || !match[1] || match[1].trim().length === 0) {
                 console.log(`⚠️ [EXTRAÇÃO] Campo não encontrado: ${labelPattern.substring(0, 30)}`);
@@ -296,15 +272,24 @@ function extrairCamposLista(textoBruto) {
             
             let valor = match[1].trim();
             
-            // Se quiser apenas a linha atual (primeira linha)
+            // Remover números de página, URLs e lixo comum
+            valor = valor
+                .replace(/www\.\S+/g, '')
+                .replace(/PLANTÃO\s+\d+\s+HORAS/gi, '')
+                .replace(/\d{4}\s+\d{3}\s+\d{4}/g, '')
+                .replace(/Página\s+\d+/gi, '')
+                .trim();
+            
+            // Se quiser apenas a primeira palavra/valor (remove resto)
             if (somenteLinhaAtual) {
-                valor = valor.split('\n')[0].trim();
+                // Pega até o próximo espaço grande ou label conhecido
+                valor = valor.split(/\s{2,}/)[0].trim();
             }
             
             // Limpar espaços múltiplos
             valor = valor.replace(/\s+/g, ' ');
             
-            // Remover lixo comum de PDFs tabulares
+            // Remover caracteres especiais do início
             valor = valor.replace(/^[:\-\s]+/, '').trim();
             
             // Aplicar limite de caracteres se especificado
@@ -312,9 +297,13 @@ function extrairCamposLista(textoBruto) {
                 valor = valor.substring(0, limiteCaracteres) + '...';
             }
             
-            console.log(`✅ [EXTRAÇÃO] ${labelPattern.substring(0, 20)} (${metodo}): "${valor.substring(0, 50)}${valor.length > 50 ? '...' : ''}"`);
+            if (!valor || valor.length === 0) {
+                return '--';
+            }
             
-            return valor || '--';
+            console.log(`✅ [EXTRAÇÃO] ${labelPattern.substring(0, 20)}: "${valor.substring(0, 50)}${valor.length > 50 ? '...' : ''}"`);
+            
+            return valor;
             
         } catch (erro) {
             console.error(`❌ [EXTRAÇÃO] Erro ao extrair ${labelPattern}: ${erro.message}`);
@@ -325,9 +314,16 @@ function extrairCamposLista(textoBruto) {
     // PASSO 4: Funções especiais para campos complexos (com CIDADE adjacente)
     const extrairLocalEvento = () => {
         try {
-            const regex = /LOCAL\s+DO\s+EVENTO\s*[:\-]\s*([^\n]+?)(?=\s*CIDADE|$)/i;
+            // Captura o local até encontrar CIDADE ou outro campo
+            const regex = /LOCAL\s+DO\s+EVENTO\s*[:\-]?\s*([^:\n]*?)(?=\s*CIDADE|NATUREZA|MANIFESTO|$)/i;
             const match = regex.exec(textoCompleto);
-            return match && match[1] ? match[1].trim().replace(/\s+/g, ' ') : '--';
+            if (match && match[1]) {
+                let valor = match[1].trim().replace(/\s+/g, ' ');
+                // Remove apenas números/códigos no final
+                valor = valor.replace(/\s+\d{2,}$/, '');
+                return valor || '--';
+            }
+            return '--';
         } catch (e) {
             return '--';
         }
@@ -335,9 +331,16 @@ function extrairCamposLista(textoBruto) {
     
     const extrairCidadeEvento = () => {
         try {
-            const regex = /LOCAL\s+DO\s+EVENTO[\s\S]*?CIDADE\s*[:\-]\s*([^\n]+)/i;
+            // Busca CIDADE após LOCAL DO EVENTO
+            const regex = /LOCAL\s+DO\s+EVENTO[^:]*:\s*[^\n]*?CIDADE\s*[:\-]?\s*([^\s:]+(?:\s+[^\s:]+)?)/i;
             const match = regex.exec(textoCompleto);
-            return match && match[1] ? match[1].trim().replace(/\s+/g, ' ') : '--';
+            if (match && match[1]) {
+                return match[1].trim().replace(/\s+/g, ' ');
+            }
+            // Tenta padrão alternativo
+            const regex2 = /CIDADE\s*(?:DO\s+EVENTO)?\s*[:\-]?\s*([^\s]+(?:\s+[^\s]+)?)\s*(?=LOCAL\s+DA\s+VISTORIA|NATUREZA|$)/i;
+            const match2 = regex2.exec(textoCompleto);
+            return match2 && match2[1] ? match2[1].trim() : '--';
         } catch (e) {
             return '--';
         }
@@ -345,9 +348,14 @@ function extrairCamposLista(textoBruto) {
     
     const extrairLocalVistoria = () => {
         try {
-            const regex = /LOCAL\s+DA\s+VISTORIA\s*[:\-]\s*([^\n]+?)(?=\s*CIDADE|$)/i;
+            const regex = /LOCAL\s+DA\s+VISTORIA\s*[:\-]?\s*([^:\n]*?)(?=\s*CIDADE|NATUREZA|$)/i;
             const match = regex.exec(textoCompleto);
-            return match && match[1] ? match[1].trim().replace(/\s+/g, ' ') : '--';
+            if (match && match[1]) {
+                let valor = match[1].trim().replace(/\s+/g, ' ');
+                valor = valor.replace(/\s+\d{2,}$/, '');
+                return valor || '--';
+            }
+            return '--';
         } catch (e) {
             return '--';
         }
@@ -355,9 +363,14 @@ function extrairCamposLista(textoBruto) {
     
     const extrairCidadeVistoria = () => {
         try {
-            const regex = /LOCAL\s+DA\s+VISTORIA[\s\S]*?CIDADE\s*[:\-]\s*([^\n]+)/i;
+            const regex = /LOCAL\s+DA\s+VISTORIA[^:]*:\s*[^\n]*?CIDADE\s*[:\-]?\s*([^\s:]+(?:\s+[^\s:]+)?)/i;
             const match = regex.exec(textoCompleto);
-            return match && match[1] ? match[1].trim().replace(/\s+/g, ' ') : '--';
+            if (match && match[1]) {
+                return match[1].trim().replace(/\s+/g, ' ');
+            }
+            const regex2 = /CIDADE\s*(?:DA\s+VISTORIA)?\s*[:\-]?\s*([^\s]+(?:\s+[^\s]+)?)\s*(?=NATUREZA|DATA|$)/i;
+            const match2 = regex2.exec(textoCompleto);
+            return match2 && match2[1] ? match2[1].trim() : '--';
         } catch (e) {
             return '--';
         }
