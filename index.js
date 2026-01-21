@@ -2,7 +2,7 @@ const BaileysClient = require('./src/baileysClient');
 const path = require('path'); 
 const fs = require('fs');
 const os = require('os');
-const pdfParse = require('pdf-parse');
+const pdfjs = require('pdfjs-dist');
 const Tesseract = require('tesseract.js');
 const sharp = require('sharp');
 const mammoth = require('mammoth');
@@ -59,7 +59,7 @@ async function processarImagem(buffer) {
     }
 }
 
-// Processar PDF com OCR como fallback
+// Processar PDF com PDF.js e OCR como fallback
 async function processarPDF(buffer) {
     console.log('📄 [PDF] Processando PDF...');
     
@@ -70,20 +70,42 @@ async function processarPDF(buffer) {
         
         console.log(`📄 [PDF] Tamanho do buffer: ${buffer.length} bytes`);
         
-        // Método 1: Tentar com pdf-parse (para PDFs com texto extraível)
+        // Método 1: Tentar com PDF.js (para PDFs com texto extraível)
         try {
-            const pdfData = await pdfParse(buffer);
+            console.log('🔄 [PDF] Método 1: Usando PDF.js para extração de texto...');
             
-            if (pdfData && pdfData.text && pdfData.text.trim().length > 50) {
-                console.log(`✅ [PDF] Texto extraído com sucesso (método 1): ${pdfData.text.length} chars`);
-                console.log(`📄 [PDF] Primeiros 300 chars: ${pdfData.text.substring(0, 300)}`);
-                return pdfData.text;
+            // Carregar o PDF
+            const pdf = await pdfjs.getDocument({ data: buffer }).promise;
+            let textoCompleto = '';
+            
+            console.log(`📄 [PDF] Total de páginas: ${pdf.numPages}`);
+            
+            // Iterar por cada página
+            for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                try {
+                    const page = await pdf.getPage(pageNum);
+                    const textContent = await page.getTextContent();
+                    const pageText = textContent.items.map(item => item.str).join(' ');
+                    
+                    if (pageText && pageText.trim().length > 0) {
+                        textoCompleto += `\n--- Página ${pageNum} ---\n${pageText}`;
+                        console.log(`✅ [PDF] Página ${pageNum}: ${pageText.length} chars extraídos`);
+                    }
+                } catch (pageErr) {
+                    console.error(`⚠️ [PDF] Erro ao processar página ${pageNum}:`, pageErr.message);
+                }
+            }
+            
+            if (textoCompleto.trim().length > 50) {
+                console.log(`✅ [PDF] Texto extraído com PDF.js: ${textoCompleto.length} chars`);
+                console.log(`📄 [PDF] Primeiros 300 chars: ${textoCompleto.substring(0, 300)}`);
+                return textoCompleto;
             } else {
-                console.log(`⚠️ [PDF] Texto insuficiente com pdf-parse (${pdfData?.text?.length || 0} chars)`);
+                console.log(`⚠️ [PDF] Texto insuficiente com PDF.js (${textoCompleto.length} chars)`);
                 throw new Error('PDF_TEXTO_INSUFICIENTE_METODO1');
             }
         } catch (err1) {
-            console.log(`⚠️ [PDF] Método 1 (pdf-parse) falhou: ${err1.message}`);
+            console.log(`⚠️ [PDF] Método 1 (PDF.js) falhou: ${err1.message}`);
             
             // Método 2: Converter PDF para imagens e aplicar OCR
             try {

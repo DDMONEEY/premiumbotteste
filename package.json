@@ -16,7 +16,6 @@
     "baileys": "^6.3.0",
     "csv-parser": "^3.2.0",
     "mammoth": "^1.11.0",
-    "pdf-parse": "^2.4.5",
     "pdf2pic": "^3.2.0",
     "pdfjs-dist": "^5.4.530",
     "pino": "^8.19.0",
