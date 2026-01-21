@@ -195,147 +195,201 @@ function getDefaultData() {
 /**
  * FUNÇÃO PRINCIPAL - Extrai campos de aviso de sinistro e retorna lista formatada
  * 
- * @param {string} textoBruto - Texto extraído do PDF/documento
- * @returns {string} Lista formatada com 20 campos fixos (hífen + espaço + campo: valor)
+ * LÓGICA:
+ * 1. Recebe TODO o texto extraído do PDF/documento
+ * 2. Define os 20 campos fixos que devem ser extraídos
+ * 3. Para cada campo, busca no texto completo usando regex
+ * 4. Preenche com o valor encontrado ou "--" se não encontrar
+ * 5. Retorna formatado como lista com bullet points
  * 
- * @example
- * const textoPDF = await extrairTextoPDF(buffer);
- * const resumo = extrairCamposLista(textoPDF);
- * await enviarWhatsApp(resumo);
- * 
- * Formato de saída:
- * - Nº sinistro: 201034
- * - Seguradora: AXA SEGUROS
- * - Segurado: PURA BENCAO TRANSPORTES LTDA
- * ...
+ * @param {string} textoBruto - Texto COMPLETO extraído do PDF/documento
+ * @returns {string} Lista formatada com 20 campos fixos
  */
 function extrairCamposLista(textoBruto) {
-    const texto = (textoBruto || '').replace(/\r\n/g, '\n');
-
-    const LABELS_MASTER =
-        'N[º°]\\s*SINISTRO(?:\\s*\\(SEC\\))?' +
-        '|SEGURADORA' +
-        '|SEGURADO' +
-        '|MOTORISTA' +
-        '|TELEFONE' +
-        '|PLACAS?' +
-        '|REMETENTE' +
-        '|ORIGEM' +
-        '|DESTINAT[ÁA]RIO' +
-        '|DESTINO' +
-        '|LOCAL\\s+DO\\s+EVENTO' +
-        '|CIDADE(?:\\s+DO\\s+EVENTO)?' +
-        '|LOCAL\\s+DA\\s+VISTORIA' +
-        '|CIDADE(?:\\s+DA\\s+VISTORIA)?' +
-        '|NATUREZA' +
-        '|MANIFESTO(?:\\s*N[º°])?' +
-        '|FATURA\\/?N\\.?FISCAL' +
-        '|MERCADORIA' +
-        '|VALOR\\s+DECLARADO' +
-        '|OBSERVA[ÇC][ÃA]O|OBSERVA[ÇC][ÕO]ES';
-
-    const capture = (labelRegexStr, stopAtFirstLine = false) => {
-        const re = new RegExp(
-            `(?:^|\\n)\\s*(?:${labelRegexStr})\\s*[:\\-]\\s*([\\s\\S]*?)(?=\\n\\s*(?:${LABELS_MASTER})\\s*[:\\-]|$)`,
-            'i'
-        );
-        const m = re.exec(texto);
-        if (!m || !m[1]) return '--';
+    console.log('🔍 [EXTRAÇÃO] Iniciando análise do documento...');
+    console.log(`📄 [EXTRAÇÃO] Tamanho do texto: ${textoBruto?.length || 0} caracteres`);
+    
+    // PASSO 1: Normalizar o texto completo
+    const textoCompleto = (textoBruto || '')
+        .replace(/\r\n/g, '\n')           // Normalizar quebras de linha
+        .replace(/[ \t]+/g, ' ')          // Normalizar espaços
+        .trim();
+    
+    if (!textoCompleto || textoCompleto.length < 10) {
+        console.log('⚠️ [EXTRAÇÃO] Texto vazio ou muito curto');
+        return '❌ *ERRO: Documento vazio ou ilegível*';
+    }
+    
+    console.log(`📝 [EXTRAÇÃO] Primeiros 200 chars: ${textoCompleto.substring(0, 200)}`);
+    
+    // PASSO 2: Definir TODOS os campos que queremos extrair
+    // Lista master de todos os labels possíveis (para lookahead negativo)
+    const TODOS_LABELS = [
+        'N[º°]\\s*SINISTRO(?:\\s*\\(SEC\\))?',
+        'SEGURADORA',
+        'SEGURADO',
+        'MOTORISTA',
+        'TELEFONE',
+        'PLACAS?',
+        'REMETENTE',
+        'ORIGEM',
+        'DESTINAT[ÁA]RIO',
+        'DESTINO',
+        'LOCAL\\s+DO\\s+EVENTO',
+        'CIDADE(?:\\s+DO\\s+EVENTO)?',
+        'LOCAL\\s+DA\\s+VISTORIA',
+        'CIDADE(?:\\s+DA\\s+VISTORIA)?',
+        'NATUREZA',
+        'MANIFESTO(?:\\s*N[º°])?',
+        'FATURA\\/?N\\.?FISCAL',
+        'MERCADORIA',
+        'VALOR\\s+DECLARADO',
+        'OBSERVA[ÇC][ÃA]O|OBSERVA[ÇC][ÕO]ES'
+    ].join('|');
+    
+    // PASSO 3: Função genérica para extrair qualquer campo
+    const extrairCampo = (labelPattern, opcoes = {}) => {
+        const {
+            somenteLinhaAtual = false,
+            multiplosValores = false,
+            limiteCaracteres = null
+        } = opcoes;
         
-        let resultado = m[1].trim();
-        
-        if (stopAtFirstLine) {
-            resultado = resultado.split('\n')[0].trim();
+        try {
+            // Monta o regex: captura até encontrar outro label ou fim do texto
+            const regex = new RegExp(
+                `(?:^|\\n)\\s*(?:${labelPattern})\\s*[:\\-]\\s*([\\s\\S]*?)(?=\\n\\s*(?:${TODOS_LABELS})\\s*[:\\-]|$)`,
+                'i'
+            );
+            
+            const match = regex.exec(textoCompleto);
+            
+            if (!match || !match[1]) {
+                console.log(`⚠️ [EXTRAÇÃO] Campo não encontrado: ${labelPattern.substring(0, 30)}`);
+                return '--';
+            }
+            
+            let valor = match[1].trim();
+            
+            // Se quiser apenas a linha atual (primeira linha)
+            if (somenteLinhaAtual) {
+                valor = valor.split('\n')[0].trim();
+            }
+            
+            // Limpar espaços múltiplos
+            valor = valor.replace(/\s+/g, ' ');
+            
+            // Aplicar limite de caracteres se especificado
+            if (limiteCaracteres && valor.length > limiteCaracteres) {
+                valor = valor.substring(0, limiteCaracteres) + '...';
+            }
+            
+            console.log(`✅ [EXTRAÇÃO] ${labelPattern.substring(0, 20)}: "${valor.substring(0, 50)}${valor.length > 50 ? '...' : ''}"`);
+            
+            return valor || '--';
+            
+        } catch (erro) {
+            console.error(`❌ [EXTRAÇÃO] Erro ao extrair ${labelPattern}: ${erro.message}`);
+            return '--';
         }
-        
-        resultado = resultado.replace(/[ \t]+/g, ' ');
-        return resultado || '--';
     };
-
-    const captureCidadeEvento = () => {
-        const re = new RegExp(
-            `LOCAL\\s+DO\\s+EVENTO[\\s\\S]*?CIDADE\\s*[:\\-]\\s*([^\\n]+)`,
-            'i'
-        );
-        const m = re.exec(texto);
-        if (m && m[1]) return m[1].trim().replace(/[ \t]+/g, ' ');
-        return '--';
+    
+    // PASSO 4: Funções especiais para campos complexos (com CIDADE adjacente)
+    const extrairLocalEvento = () => {
+        try {
+            const regex = /LOCAL\s+DO\s+EVENTO\s*[:\-]\s*([^\n]+?)(?=\s*CIDADE|$)/i;
+            const match = regex.exec(textoCompleto);
+            return match && match[1] ? match[1].trim().replace(/\s+/g, ' ') : '--';
+        } catch (e) {
+            return '--';
+        }
     };
-
-    const captureCidadeVistoria = () => {
-        const re = new RegExp(
-            `LOCAL\\s+DA\\s+VISTORIA[\\s\\S]*?CIDADE\\s*[:\\-]\\s*([^\\n]+)`,
-            'i'
-        );
-        const m = re.exec(texto);
-        if (m && m[1]) return m[1].trim().replace(/[ \t]+/g, ' ');
-        return '--';
+    
+    const extrairCidadeEvento = () => {
+        try {
+            const regex = /LOCAL\s+DO\s+EVENTO[\s\S]*?CIDADE\s*[:\-]\s*([^\n]+)/i;
+            const match = regex.exec(textoCompleto);
+            return match && match[1] ? match[1].trim().replace(/\s+/g, ' ') : '--';
+        } catch (e) {
+            return '--';
+        }
     };
-
-    const captureLocalEvento = () => {
-        const re = new RegExp(
-            `LOCAL\\s+DO\\s+EVENTO\\s*[:\\-]\\s*([^\\n]+?)(?=\\s*CIDADE|\\n|$)`,
-            'i'
-        );
-        const m = re.exec(texto);
-        if (m && m[1]) return m[1].trim().replace(/[ \t]+/g, ' ');
-        return '--';
+    
+    const extrairLocalVistoria = () => {
+        try {
+            const regex = /LOCAL\s+DA\s+VISTORIA\s*[:\-]\s*([^\n]+?)(?=\s*CIDADE|$)/i;
+            const match = regex.exec(textoCompleto);
+            return match && match[1] ? match[1].trim().replace(/\s+/g, ' ') : '--';
+        } catch (e) {
+            return '--';
+        }
     };
-
-    const captureLocalVistoria = () => {
-        const re = new RegExp(
-            `LOCAL\\s+DA\\s+VISTORIA\\s*[:\\-]\\s*([^\\n]+?)(?=\\s*CIDADE|\\n|$)`,
-            'i'
-        );
-        const m = re.exec(texto);
-        if (m && m[1]) return m[1].trim().replace(/[ \t]+/g, ' ');
-        return '--';
+    
+    const extrairCidadeVistoria = () => {
+        try {
+            const regex = /LOCAL\s+DA\s+VISTORIA[\s\S]*?CIDADE\s*[:\-]\s*([^\n]+)/i;
+            const match = regex.exec(textoCompleto);
+            return match && match[1] ? match[1].trim().replace(/\s+/g, ' ') : '--';
+        } catch (e) {
+            return '--';
+        }
     };
-
-    const sinistro = capture('N[º°]\\s*SINISTRO(?:\\s*\\(SEC\\))?', true);
-    const seguradora = capture('SEGURADORA', true);
-    const segurado = capture('SEGURADO', true);
-    const motorista = capture('MOTORISTA', true);
-    const telefone = capture('TELEFONE', true);
-    const placas = capture('PLACAS?', true);
-    const remetente = capture('REMETENTE', true);
-    const origem = capture('ORIGEM', true);
-    const destinatario = capture('DESTINAT[ÁA]RIO', true);
-    const destino = capture('DESTINO', true);
-    const localEvento = captureLocalEvento();
-    const cidadeEvento = captureCidadeEvento();
-    const localVistoria = captureLocalVistoria();
-    const cidadeVistoria = captureCidadeVistoria();
-    const natureza = capture('NATUREZA', true);
-    const manifesto = capture('MANIFESTO(?:\\s*N[º°])?', true);
-    const fatura = capture('FATURA\\/?N\\.?FISCAL', true);
-    const mercadoria = capture('MERCADORIA', true);
-    const valorDeclarado = capture('VALOR\\s+DECLARADO', true);
-    const observacaoRaw = capture('OBSERVA[ÇC][ÃA]O|OBSERVA[ÇC][ÕO]ES');
-    const observacao = observacaoRaw.length > 500 ? observacaoRaw.substring(0, 500) + '...' : observacaoRaw;
-
-    return '✅ *RESUMO DO AVISO GERADO*\n\n' + [
-        `• *Nº sinistro:* ${sinistro}`,
-        `• *Seguradora:* ${seguradora}`,
-        `• *Segurado:* ${segurado}`,
-        `• *Motorista:* ${motorista}`,
-        `• *Telefone:* ${telefone}`,
-        `• *Placas:* ${placas}`,
-        `• *Remetente:* ${remetente}`,
-        `• *Origem:* ${origem}`,
-        `• *Destinatário:* ${destinatario}`,
-        `• *Destino:* ${destino}`,
-        `• *Local do evento:* ${localEvento}`,
-        `• *Cidade do evento:* ${cidadeEvento}`,
-        `• *Local da vistoria:* ${localVistoria}`,
-        `• *Cidade da vistoria:* ${cidadeVistoria}`,
-        `• *Natureza:* ${natureza}`,
-        `• *Manifesto:* ${manifesto}`,
-        `• *Fatura/NF:* ${fatura}`,
-        `• *Mercadoria:* ${mercadoria}`,
-        `• *Valor declarado:* ${valorDeclarado}`,
-        `• *Observação:* ${observacao}`
+    
+    // PASSO 5: Extrair cada um dos 20 campos do documento
+    console.log('🔎 [EXTRAÇÃO] Buscando campos no documento...');
+    
+    const dadosExtraidos = {
+        sinistro: extrairCampo('N[º°]\\s*SINISTRO(?:\\s*\\(SEC\\))?', { somenteLinhaAtual: true }),
+        seguradora: extrairCampo('SEGURADORA', { somenteLinhaAtual: true }),
+        segurado: extrairCampo('SEGURADO', { somenteLinhaAtual: true }),
+        motorista: extrairCampo('MOTORISTA', { somenteLinhaAtual: true }),
+        telefone: extrairCampo('TELEFONE', { somenteLinhaAtual: true }),
+        placas: extrairCampo('PLACAS?', { somenteLinhaAtual: true }),
+        remetente: extrairCampo('REMETENTE', { somenteLinhaAtual: true }),
+        origem: extrairCampo('ORIGEM', { somenteLinhaAtual: true }),
+        destinatario: extrairCampo('DESTINAT[ÁA]RIO', { somenteLinhaAtual: true }),
+        destino: extrairCampo('DESTINO', { somenteLinhaAtual: true }),
+        localEvento: extrairLocalEvento(),
+        cidadeEvento: extrairCidadeEvento(),
+        localVistoria: extrairLocalVistoria(),
+        cidadeVistoria: extrairCidadeVistoria(),
+        natureza: extrairCampo('NATUREZA', { somenteLinhaAtual: true }),
+        manifesto: extrairCampo('MANIFESTO(?:\\s*N[º°])?', { somenteLinhaAtual: true }),
+        fatura: extrairCampo('FATURA\\/?N\\.?FISCAL', { somenteLinhaAtual: true }),
+        mercadoria: extrairCampo('MERCADORIA', { somenteLinhaAtual: true }),
+        valorDeclarado: extrairCampo('VALOR\\s+DECLARADO', { somenteLinhaAtual: true }),
+        observacao: extrairCampo('OBSERVA[ÇC][ÃA]O|OBSERVA[ÇC][ÕO]ES', { limiteCaracteres: 500 })
+    };
+    
+    console.log('✅ [EXTRAÇÃO] Todos os campos processados');
+    
+    // PASSO 6: Montar resposta formatada
+    const resumo = '✅ *RESUMO DO AVISO GERADO*\n\n' + [
+        `• *Nº sinistro:* ${dadosExtraidos.sinistro}`,
+        `• *Seguradora:* ${dadosExtraidos.seguradora}`,
+        `• *Segurado:* ${dadosExtraidos.segurado}`,
+        `• *Motorista:* ${dadosExtraidos.motorista}`,
+        `• *Telefone:* ${dadosExtraidos.telefone}`,
+        `• *Placas:* ${dadosExtraidos.placas}`,
+        `• *Remetente:* ${dadosExtraidos.remetente}`,
+        `• *Origem:* ${dadosExtraidos.origem}`,
+        `• *Destinatário:* ${dadosExtraidos.destinatario}`,
+        `• *Destino:* ${dadosExtraidos.destino}`,
+        `• *Local do evento:* ${dadosExtraidos.localEvento}`,
+        `• *Cidade do evento:* ${dadosExtraidos.cidadeEvento}`,
+        `• *Local da vistoria:* ${dadosExtraidos.localVistoria}`,
+        `• *Cidade da vistoria:* ${dadosExtraidos.cidadeVistoria}`,
+        `• *Natureza:* ${dadosExtraidos.natureza}`,
+        `• *Manifesto:* ${dadosExtraidos.manifesto}`,
+        `• *Fatura/NF:* ${dadosExtraidos.fatura}`,
+        `• *Mercadoria:* ${dadosExtraidos.mercadoria}`,
+        `• *Valor declarado:* ${dadosExtraidos.valorDeclarado}`,
+        `• *Observação:* ${dadosExtraidos.observacao}`
     ].join('\n');
+    
+    console.log('📤 [EXTRAÇÃO] Resumo gerado com sucesso');
+    
+    return resumo;
 }
 
 module.exports = { extrairDadosAvancado, extrairCamposLista };
