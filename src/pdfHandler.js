@@ -189,4 +189,86 @@ function getDefaultData() {
     };
 }
 
-module.exports = { extrairDadosAvancado };
+// Extração estrita no formato de lista solicitado
+function extrairCamposLista(textoBruto) {
+        const texto = (textoBruto || '').replace(/\r\n/g, '\n');
+
+        const LABELS_MASTER =
+            'N[º°]\\s*SINISTRO(?:\\s*\\(SEC\\))?|SEGURADORA|SEGURADO|MOTORISTA|TELEFONE|PLACAS?|REMETENTE|ORIGEM|DESTINAT[ÁA]RIO|DESTINO|LOCAL\\s+DO\\s+EVENTO|CIDADE\\s+DO\\s+EVENTO|LOCAL\\s+DA\\s+VISTORIA|CIDADE\\s+DA\\s+VISTORIA|NATUREZA|MANIFESTO(?:\\s*N[º°])?|FATURA\\/?N\\.?FISCAL|N\\.?FISCAL|NOTA\\s+FISCAL|MERCADORIA|CARGA|VALOR\\s+DECLARADO|OBSERVA[ÇC][ÃA]O|OBSERVA[ÇC][ÕO]ES';
+
+        const capture = (labelRegexStr) => {
+            const re = new RegExp(
+                `(?:^|\\n)\\s*(?:${labelRegexStr})\\s*[:\\-]\\s*([\\s\\S]*?)(?=\\n\\s*(?:${LABELS_MASTER})\\s*[:\\-]|$)`,
+                'i'
+            );
+            const m = re.exec(texto);
+            if (!m || !m[1]) return '--';
+            return m[1].trim().replace(/[ \t]+/g, ' ');
+        };
+
+        const captureCidadeEvento = () => {
+            const re = new RegExp(
+                `LOCAL\\s+DO\\s+EVENTO[\\s\\S]*?CIDADE\\s*[:\\-]\\s*([^\\n]+)`,
+                'i'
+            );
+            const m = re.exec(texto);
+            if (m && m[1]) return m[1].trim();
+            return capture('CIDADE\\s+DO\\s+EVENTO|CIDADE');
+        };
+
+        const captureCidadeVistoria = () => {
+            const re = new RegExp(
+                `LOCAL\\s+DA\\s+VISTORIA[\\s\\S]*?CIDADE\\s*[:\\-]\\s*([^\\n]+)`,
+                'i'
+            );
+            const m = re.exec(texto);
+            if (m && m[1]) return m[1].trim();
+            return capture('CIDADE\\s+DA\\s+VISTORIA|CIDADE');
+        };
+
+        const sinistro = capture('N[º°]\\s*SINISTRO(?:\\s*\\(SEC\\))?');
+        const seguradora = capture('SEGURADORA');
+        const segurado = capture('SEGURADO');
+        const motorista = capture('MOTORISTA');
+        const telefone = capture('TELEFONE');
+        const placas = capture('PLACAS?');
+        const remetente = capture('REMETENTE');
+        const origem = capture('ORIGEM');
+        const destinatario = capture('DESTINAT[ÁA]RIO');
+        const destino = capture('DESTINO');
+        const localEvento = capture('LOCAL\\s+DO\\s+EVENTO');
+        const cidadeEvento = captureCidadeEvento();
+        const localVistoria = capture('LOCAL\\s+DA\\s+VISTORIA');
+        const cidadeVistoria = captureCidadeVistoria();
+        const natureza = capture('NATUREZA');
+        const manifesto = capture('MANIFESTO(?:\\s*N[º°])?');
+        const fatura = capture('FATURA\\/?N\\.?FISCAL|N\\.?FISCAL|NOTA\\s+FISCAL');
+        const mercadoria = capture('MERCADORIA|CARGA');
+        const valorDeclarado = capture('VALOR\\s+DECLARADO');
+        const observacao = capture('OBSERVA[ÇC][ÃA]O|OBSERVA[ÇC][ÕO]ES');
+
+        return [
+            `- Nº sinistro: ${sinistro || '--'}`,
+            `- Seguradora: ${seguradora || '--'}`,
+            `- Segurado: ${segurado || '--'}`,
+            `- Motorista: ${motorista || '--'}`,
+            `- Telefone: ${telefone || '--'}`,
+            `- Placas: ${placas || '--'}`,
+            `- Remetente: ${remetente || '--'}`,
+            `- Origem: ${origem || '--'}`,
+            `- Destinatário: ${destinatario || '--'}`,
+            `- Destino: ${destino || '--'}`,
+            `- Local do evento: ${localEvento || '--'}`,
+            `- Cidade do evento: ${cidadeEvento || '--'}`,
+            `- Local da vistoria: ${localVistoria || '--'}`,
+            `- Cidade da vistoria: ${cidadeVistoria || '--'}`,
+            `- Natureza: ${natureza || '--'}`,
+            `- Manifesto: ${manifesto || '--'}`,
+            `- Fatura/NF Fiscal: ${fatura || '--'}`,
+            `- Mercadoria: ${mercadoria || '--'}`,
+            `- Valor declarado: ${valorDeclarado || '--'}`,
+            `- Observação: ${observacao || '--'}`
+        ].join('\n');
+}
+
+module.exports = { extrairDadosAvancado, extrairCamposLista };

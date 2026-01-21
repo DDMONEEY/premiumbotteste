@@ -12,7 +12,7 @@ const { fromPath } = require('pdf2pic');
 
 const { ANTI_FLOOD_TIME, NOME_GRUPO_AUDITORIA, VERSAO_BOT, comandosValidos } = require('./src/config');
 const { logPainel, logComando } = require('./src/logger');
-const { extrairDadosAvancado } = require('./src/pdfHandler');
+const { extrairDadosAvancado, extrairCamposLista } = require('./src/pdfHandler');
 
 const client = new BaileysClient();
 
@@ -540,36 +540,10 @@ client.onMessage(async (msg) => {
                     // Processar arquivo (detecta tipo automaticamente)
                     const textoExtraido = await processarArquivo(msg);
                     
-                    // Extrair dados
-                    console.log('📊 [DADOS] Extraindo...');
-                    const dados = extrairDadosAvancado(textoExtraido);
-                    console.log('✅ [DADOS] Extraídos');
-                    
-                    // Construir resposta
-                    console.log('📝 [RESPOSTA] Montando...');
-                    const resposta = 
-                        `✅ *RESUMO DO AVISO EXTRAÍDO*\n` +
-                        `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-                        `• Nº sinistro: ${dados.sinistro}\n` +
-                        `• Seguradora: ${dados.seguradora}\n` +
-                        `• Segurado: ${dados.segurado}\n` +
-                        `• Motorista: ${dados.motorista}\n` +
-                        `• Telefone: ${dados.telMotorista}\n` +
-                        `• Placas: ${dados.placas}\n` +
-                        `• Remetente: ${dados.remetente}\n` +
-                        `• Origem: ${dados.origem}\n` +
-                        `• Destinatário: ${dados.destinatario}\n` +
-                        `• Destino: ${dados.destino}\n` +
-                        `• Local do evento: ${dados.localEvento}\n` +
-                        `• Cidade do evento: ${dados.cidadeEvento}\n` +
-                        `• Local da vistoria: ${dados.localVistoria}\n` +
-                        `• Cidade da vistoria: ${dados.cidadeVistoria}\n` +
-                        `• Natureza: ${dados.natureza}\n` +
-                        `• Manifesto: ${dados.manifesto}\n` +
-                        `• Fatura/N.Fiscal: ${dados.nf}\n` +
-                        `• Mercadoria: ${dados.mercadoria}\n` +
-                        `• Valor declarado: ${dados.valor}\n` +
-                        `• Observação: ${dados.obs}`;
+                    // Extrair lista estrita
+                    console.log('📊 [DADOS] Extraindo lista estrita...');
+                    const resposta = extrairCamposLista(textoExtraido);
+                    console.log('✅ [DADOS] Lista gerada');
                     
                     // Enviar resposta
                     console.log('📤 [ENVIO] Enviando...');
