@@ -7,7 +7,8 @@ const Tesseract = require('tesseract.js');
 const sharp = require('sharp');
 const mammoth = require('mammoth');
 const XLSX = require('xlsx');
-const csv = require('csv-parser'); 
+const csv = require('csv-parser');
+const { fromPath } = require('pdf2pic'); 
 
 const { ANTI_FLOOD_TIME, NOME_GRUPO_AUDITORIA, VERSAO_BOT, comandosValidos } = require('./src/config');
 const { logPainel, logComando } = require('./src/logger');
@@ -58,7 +59,7 @@ async function processarImagem(buffer) {
     }
 }
 
-// Processar PDF com fallback
+// Processar PDF com OCR como fallback
 async function processarPDF(buffer) {
     console.log('📄 [PDF] Processando PDF...');
     
@@ -74,33 +75,100 @@ async function processarPDF(buffer) {
             const pdfData = await pdfParse(buffer);
             
             if (pdfData && pdfData.text && pdfData.text.trim().length > 50) {
-                console.log(`✅ [PDF] Texto extraído com sucesso: ${pdfData.text.length} chars`);
+                console.log(`✅ [PDF] Texto extraído com sucesso (método 1): ${pdfData.text.length} chars`);
                 console.log(`📄 [PDF] Primeiros 300 chars: ${pdfData.text.substring(0, 300)}`);
                 return pdfData.text;
             } else {
                 console.log(`⚠️ [PDF] Texto insuficiente com pdf-parse (${pdfData?.text?.length || 0} chars)`);
-                throw new Error('PDF_TEXTO_INSUFICIENTE');
+                throw new Error('PDF_TEXTO_INSUFICIENTE_METODO1');
             }
         } catch (err1) {
             console.log(`⚠️ [PDF] Método 1 (pdf-parse) falhou: ${err1.message}`);
             
-            // Método 2: Tentar converter PDF para imagem e fazer OCR
+            // Método 2: Converter PDF para imagens e aplicar OCR
             try {
                 console.log('🔄 [PDF] Tentando método 2: PDF → Imagem → OCR...');
                 
-                // Usar Tesseract diretamente no buffer do PDF convertido
-                // Nota: Tesseract é mais eficaz em imagens, então vamos tentar outra abordagem
-                // Tentar extrair texto novamente com parâmetros diferentes
-                const pdfDataRetry = await pdfParse(buffer);
+                // Salvar buffer temporariamente
+                const tempPdfPath = path.join(os.tmpdir(), `temp_${Date.now()}.pdf`);
+                fs.writeFileSync(tempPdfPath, buffer);
                 
-                if (pdfDataRetry && pdfDataRetry.text && pdfDataRetry.text.trim().length > 0) {
-                    console.log(`✅ [PDF] Texto extraído no retry: ${pdfDataRetry.text.length} chars`);
-                    return pdfDataRetry.text;
+                try {
+                    console.log(`📝 [PDF] PDF salvo temporariamente em: ${tempPdfPath}`);
+                    
+                    // Converter PDF para imagens
+                    const options = {
+                        density: 200,
+                        savefilename: 'page',
+                        savedir: os.tmpdir(),
+                        format: 'png',
+                        width: 1920,
+                        height: 1080,
+                    };
+                    
+                    console.log('🔄 [PDF] Convertendo PDF para imagens...');
+                    const pages = await fromPath(tempPdfPath, options);
+                    
+                    console.log(`✅ [PDF] PDF convertido para ${pages.length} página(s)`);
+                    
+                    // Aplicar OCR em cada página
+                    let textoCompleto = '';
+                    
+                    for (let i = 0; i < pages.length; i++) {
+                        const page = pages[i];
+                        console.log(`🔄 [PDF] Processando página ${i + 1}/${pages.length}...`);
+                        
+                        try {
+                            // Ler arquivo de imagem
+                            const imgBuffer = fs.readFileSync(page.path);
+                            
+                            // Otimizar imagem
+                            const imgOtimizada = await sharp(imgBuffer)
+                                .greyscale()
+                                .normalise()
+                                .sharpen()
+                                .toBuffer();
+                            
+                            // OCR
+                            const { data: { text } } = await Tesseract.recognize(imgOtimizada, 'por', {
+                                logger: () => {}
+                            });
+                            
+                            if (text && text.trim().length > 0) {
+                                textoCompleto += `\n--- Página ${i + 1} ---\n${text}`;
+                                console.log(`✅ [PDF] Página ${i + 1}: ${text.length} chars extraídos`);
+                            }
+                            
+                            // Limpar arquivo temporário
+                            try {
+                                fs.unlinkSync(page.path);
+                            } catch (e) {}
+                        } catch (pageErr) {
+                            console.error(`⚠️ [PDF] Erro ao processar página ${i + 1}:`, pageErr.message);
+                        }
+                    }
+                    
+                    // Limpar arquivo PDF temporário
+                    try {
+                        fs.unlinkSync(tempPdfPath);
+                    } catch (e) {}
+                    
+                    if (textoCompleto.trim().length > 50) {
+                        console.log(`✅ [PDF] Texto extraído com OCR: ${textoCompleto.length} chars`);
+                        return textoCompleto;
+                    } else {
+                        throw new Error('PDF_TEXTO_INSUFICIENTE_OCR');
+                    }
+                } catch (err2) {
+                    // Limpar arquivo PDF temporário
+                    try {
+                        fs.unlinkSync(tempPdfPath);
+                    } catch (e) {}
+                    
+                    throw err2;
                 }
-                
-                throw new Error('PDF_SEM_TEXTO_METODO2');
-            } catch (err2) {
-                console.log(`⚠️ [PDF] Método 2 também falhou: ${err2.message}`);
+            } catch (err3) {
+                console.log(`⚠️ [PDF] Método 2 (OCR) falhou: ${err3.message}`);
                 console.error('❌ [PDF] Não foi possível extrair texto do PDF com nenhum método');
                 throw new Error('PDF_SEM_TEXTO');
             }
