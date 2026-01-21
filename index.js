@@ -121,18 +121,23 @@ async function processarPDF(buffer) {
                 try {
                     console.log(`📝 [PDF] PDF salvo temporariamente em: ${tempPdfPath}`);
                     
-                    // Converter PDF para imagens
+                    // Converter PDF para imagens com pdf2pic (bulk) e aplicar OCR
                     const options = {
-                        density: 200,
-                        savefilename: 'page',
+                        density: 220,
+                        savename: `page_${Date.now()}`,
                         savedir: os.tmpdir(),
                         format: 'png',
                         width: 1920,
-                        height: 1080,
+                        height: 1920
                     };
                     
-                    console.log('🔄 [PDF] Convertendo PDF para imagens...');
-                    const pages = await fromPath(tempPdfPath, options);
+                    console.log('🔄 [PDF] Convertendo PDF para imagens (bulk)...');
+                    const converter = fromPath(tempPdfPath, options);
+                    const pages = await converter.bulk(-1, true); // -1 = todas as páginas
+                    
+                    if (!Array.isArray(pages) || pages.length === 0) {
+                        throw new Error('PDF2PIC_SEM_PAGINAS');
+                    }
                     
                     console.log(`✅ [PDF] PDF convertido para ${pages.length} página(s)`);
                     
@@ -141,13 +146,18 @@ async function processarPDF(buffer) {
                     
                     for (let i = 0; i < pages.length; i++) {
                         const page = pages[i];
+                        const pagePath = page?.path || page?.name || page;
                         console.log(`🔄 [PDF] Processando página ${i + 1}/${pages.length}...`);
                         
                         try {
-                            // Ler arquivo de imagem
-                            const imgBuffer = fs.readFileSync(page.path);
+                            if (!pagePath || !fs.existsSync(pagePath)) {
+                                throw new Error('CAMINHO_IMAGEM_INEXISTENTE');
+                            }
                             
-                            // Otimizar imagem
+                            // Ler arquivo de imagem
+                            const imgBuffer = fs.readFileSync(pagePath);
+                            
+                            // Otimizar imagem para OCR
                             const imgOtimizada = await sharp(imgBuffer)
                                 .greyscale()
                                 .normalise()
@@ -166,7 +176,7 @@ async function processarPDF(buffer) {
                             
                             // Limpar arquivo temporário
                             try {
-                                fs.unlinkSync(page.path);
+                                fs.unlinkSync(pagePath);
                             } catch (e) {}
                         } catch (pageErr) {
                             console.error(`⚠️ [PDF] Erro ao processar página ${i + 1}:`, pageErr.message);
