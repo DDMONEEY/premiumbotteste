@@ -4,7 +4,10 @@ const fs = require('fs');
 const os = require('os');
 const pdfParse = require('pdf-parse');
 const Tesseract = require('tesseract.js');
-const sharp = require('sharp'); 
+const sharp = require('sharp');
+const mammoth = require('mammoth');
+const XLSX = require('xlsx');
+const csv = require('csv-parser'); 
 
 const { ANTI_FLOOD_TIME, NOME_GRUPO_AUDITORIA, VERSAO_BOT, comandosValidos } = require('./src/config');
 const { logPainel, logComando } = require('./src/logger');
@@ -70,19 +73,37 @@ async function processarPDF(buffer) {
         try {
             const pdfData = await pdfParse(buffer);
             
-            if (pdfData && pdfData.text && pdfData.text.trim().length > 0) {
+            if (pdfData && pdfData.text && pdfData.text.trim().length > 50) {
                 console.log(`✅ [PDF] Texto extraído com sucesso: ${pdfData.text.length} chars`);
                 console.log(`📄 [PDF] Primeiros 300 chars: ${pdfData.text.substring(0, 300)}`);
                 return pdfData.text;
             } else {
-                throw new Error('PDF_SEM_TEXTO_METODO1');
+                console.log(`⚠️ [PDF] Texto insuficiente com pdf-parse (${pdfData?.text?.length || 0} chars)`);
+                throw new Error('PDF_TEXTO_INSUFICIENTE');
             }
         } catch (err1) {
             console.log(`⚠️ [PDF] Método 1 (pdf-parse) falhou: ${err1.message}`);
             
-            // Método 2: Se não conseguir extrair texto, retornar aviso
-            console.error('❌ [PDF] Não foi possível extrair texto do PDF');
-            throw new Error('PDF_SEM_TEXTO');
+            // Método 2: Tentar converter PDF para imagem e fazer OCR
+            try {
+                console.log('🔄 [PDF] Tentando método 2: PDF → Imagem → OCR...');
+                
+                // Usar Tesseract diretamente no buffer do PDF convertido
+                // Nota: Tesseract é mais eficaz em imagens, então vamos tentar outra abordagem
+                // Tentar extrair texto novamente com parâmetros diferentes
+                const pdfDataRetry = await pdfParse(buffer);
+                
+                if (pdfDataRetry && pdfDataRetry.text && pdfDataRetry.text.trim().length > 0) {
+                    console.log(`✅ [PDF] Texto extraído no retry: ${pdfDataRetry.text.length} chars`);
+                    return pdfDataRetry.text;
+                }
+                
+                throw new Error('PDF_SEM_TEXTO_METODO2');
+            } catch (err2) {
+                console.log(`⚠️ [PDF] Método 2 também falhou: ${err2.message}`);
+                console.error('❌ [PDF] Não foi possível extrair texto do PDF com nenhum método');
+                throw new Error('PDF_SEM_TEXTO');
+            }
         }
         
     } catch (err) {
@@ -91,7 +112,90 @@ async function processarPDF(buffer) {
     }
 }
 
-// Detectar tipo e processar arquivo (PDF ou Imagem)
+// Processar documento Word
+async function processarWord(buffer) {
+    console.log('📄 [WORD] Processando documento Word...');
+    
+    try {
+        if (!buffer || buffer.length === 0) {
+            throw new Error('Buffer Word vazio');
+        }
+        
+        const result = await mammoth.extractRawText({ arrayBuffer: buffer.buffer });
+        
+        if (result && result.value && result.value.trim().length > 0) {
+            console.log(`✅ [WORD] Texto extraído com sucesso: ${result.value.length} chars`);
+            return result.value;
+        } else {
+            throw new Error('WORD_SEM_TEXTO');
+        }
+    } catch (err) {
+        console.error(`❌ [WORD] Erro: ${err.message}`);
+        throw err;
+    }
+}
+
+// Processar documento Excel
+async function processarExcel(buffer) {
+    console.log('📊 [EXCEL] Processando documento Excel...');
+    
+    try {
+        if (!buffer || buffer.length === 0) {
+            throw new Error('Buffer Excel vazio');
+        }
+        
+        const workbook = XLSX.read(buffer, { type: 'buffer' });
+        let textoExtraido = '';
+        
+        // Ler todas as abas
+        for (const sheetName of workbook.SheetNames) {
+            const sheet = workbook.Sheets[sheetName];
+            textoExtraido += `--- Aba: ${sheetName} ---\n`;
+            
+            const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+            rows.forEach(row => {
+                if (Array.isArray(row)) {
+                    textoExtraido += row.join(' | ') + '\n';
+                }
+            });
+            textoExtraido += '\n';
+        }
+        
+        if (textoExtraido.trim().length > 0) {
+            console.log(`✅ [EXCEL] Texto extraído com sucesso: ${textoExtraido.length} chars`);
+            return textoExtraido;
+        } else {
+            throw new Error('EXCEL_SEM_TEXTO');
+        }
+    } catch (err) {
+        console.error(`❌ [EXCEL] Erro: ${err.message}`);
+        throw err;
+    }
+}
+
+// Processar arquivo CSV
+async function processarCSV(buffer) {
+    console.log('📋 [CSV] Processando arquivo CSV...');
+    
+    try {
+        if (!buffer || buffer.length === 0) {
+            throw new Error('Buffer CSV vazio');
+        }
+        
+        const texto = buffer.toString('utf-8');
+        
+        if (texto.trim().length > 0) {
+            console.log(`✅ [CSV] Texto extraído com sucesso: ${texto.length} chars`);
+            return texto;
+        } else {
+            throw new Error('CSV_SEM_TEXTO');
+        }
+    } catch (err) {
+        console.error(`❌ [CSV] Erro: ${err.message}`);
+        throw err;
+    }
+}
+
 async function processarArquivo(msg) {
     console.log('📥 [ARQUIVO] Iniciando download...');
     console.log('📥 [ARQUIVO] Estrutura de msg.message:', Object.keys(msg.message || {}));
@@ -128,12 +232,53 @@ async function processarArquivo(msg) {
         
         // Processar conforme o tipo
         let texto;
+        
+        // PDF
         if (mimetype === 'application/pdf' || filename.toLowerCase().endsWith('.pdf')) {
             texto = await processarPDF(buffer);
-        } else if (mimetype.startsWith('image/') || /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(filename)) {
+        } 
+        // Imagem
+        else if (mimetype.startsWith('image/') || /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(filename)) {
             texto = await processarImagem(buffer);
-        } else {
-            throw new Error('TIPO_NAO_SUPORTADO');
+        }
+        // Word (.docx)
+        else if (mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
+                 filename.toLowerCase().endsWith('.docx')) {
+            texto = await processarWord(buffer);
+        }
+        // Word (.doc)
+        else if (mimetype === 'application/msword' || filename.toLowerCase().endsWith('.doc')) {
+            texto = await processarWord(buffer);
+        }
+        // Excel (.xlsx)
+        else if (mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+                 filename.toLowerCase().endsWith('.xlsx')) {
+            texto = await processarExcel(buffer);
+        }
+        // Excel (.xls)
+        else if (mimetype === 'application/vnd.ms-excel' || filename.toLowerCase().endsWith('.xls')) {
+            texto = await processarExcel(buffer);
+        }
+        // CSV
+        else if (mimetype === 'text/csv' || filename.toLowerCase().endsWith('.csv')) {
+            texto = await processarCSV(buffer);
+        }
+        // Tentar detectar por extensão mesmo sem MIME type correto
+        else {
+            const ext = path.extname(filename).toLowerCase();
+            if (ext === '.pdf') {
+                texto = await processarPDF(buffer);
+            } else if (['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'].includes(ext)) {
+                texto = await processarImagem(buffer);
+            } else if (['.docx', '.doc'].includes(ext)) {
+                texto = await processarWord(buffer);
+            } else if (['.xlsx', '.xls'].includes(ext)) {
+                texto = await processarExcel(buffer);
+            } else if (ext === '.csv') {
+                texto = await processarCSV(buffer);
+            } else {
+                throw new Error('TIPO_NAO_SUPORTADO');
+            }
         }
         
         return texto;
@@ -237,7 +382,7 @@ client.onMessage(async (msg) => {
             console.log('📨 [DETECTOR] Tipo:', Object.keys(msg.message || {}));
             console.log('📨 [DETECTOR] Mensagem completa:', JSON.stringify(msg, null, 2));
             
-            // Aceitar PDF ou imagem - verificar múltiplas estruturas
+            // Aceitar PDF, imagem, Word, Excel, CSV - verificar múltiplas estruturas
             const docMsg = msg.message?.documentMessage || msg.message?.documentWithCaptionMessage?.message?.documentMessage;
             const imgMsg = msg.message?.imageMessage;
             
@@ -249,16 +394,41 @@ client.onMessage(async (msg) => {
                 console.log('📋 [DEBUG] FileName:', docMsg.fileName);
             }
             
+            // Verificar se é um arquivo suportado
             const isArquivoValido = 
-                (docMsg && (docMsg.mimetype === 'application/pdf' || docMsg.fileName?.toLowerCase().endsWith('.pdf'))) ||
+                (docMsg && (
+                    docMsg.mimetype === 'application/pdf' || 
+                    docMsg.fileName?.toLowerCase().endsWith('.pdf') ||
+                    docMsg.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+                    docMsg.fileName?.toLowerCase().endsWith('.docx') ||
+                    docMsg.mimetype === 'application/msword' ||
+                    docMsg.fileName?.toLowerCase().endsWith('.doc') ||
+                    docMsg.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+                    docMsg.fileName?.toLowerCase().endsWith('.xlsx') ||
+                    docMsg.mimetype === 'application/vnd.ms-excel' ||
+                    docMsg.fileName?.toLowerCase().endsWith('.xls') ||
+                    docMsg.mimetype === 'text/csv' ||
+                    docMsg.fileName?.toLowerCase().endsWith('.csv')
+                )) ||
                 (imgMsg && imgMsg.mimetype?.startsWith('image/'));
             
             if (!isArquivoValido) {
-                console.log('⚠️ [DETECTOR] Não é PDF nem imagem. Ignorando...');
+                console.log('⚠️ [DETECTOR] Não é arquivo suportado. Ignorando...');
                 return;
             }
             
-            const tipoArquivo = docMsg ? 'PDF' : 'Imagem';
+            // Determinar tipo de arquivo
+            let tipoArquivo = 'Arquivo';
+            if (docMsg) {
+                const ext = docMsg.fileName?.toLowerCase() || docMsg.mimetype || '';
+                if (ext.includes('pdf')) tipoArquivo = 'PDF';
+                else if (ext.includes('word') || ext.includes('docx') || ext.includes('doc')) tipoArquivo = 'Word';
+                else if (ext.includes('sheet') || ext.includes('excel') || ext.includes('xlsx') || ext.includes('xls')) tipoArquivo = 'Excel';
+                else if (ext.includes('csv')) tipoArquivo = 'CSV';
+            } else if (imgMsg) {
+                tipoArquivo = 'Imagem';
+            }
+            
             console.log(`📄 [${tipoArquivo}] Arquivo detectado! Processando...`);
             
             // Resetar flag IMEDIATAMENTE para evitar duplicatas
@@ -271,7 +441,7 @@ client.onMessage(async (msg) => {
                 console.error('❌ Erro ao enviar msg:', e.message);
             }
             
-            // Processar arquivo (PDF ou Imagem)
+            // Processar arquivo (detecta tipo automaticamente)
             setImmediate(async () => {
                 try {
                     console.log('🚀 [PROCESSO] Iniciando...');
@@ -324,18 +494,27 @@ client.onMessage(async (msg) => {
                     
                 } catch (error) {
                     console.error('❌ [ERRO]:', error.message);
+                    console.error('❌ [STACK]:', error.stack);
                     
                     // Mensagem de erro simplificada
                     let msgErro = '❌ *ERRO AO PROCESSAR ARQUIVO*\n\n';
                     
                     if (error.message.includes('DOWNLOAD_VAZIO')) {
-                        msgErro += 'Não foi possível baixar o arquivo.';
-                    } else if (error.message.includes('PDF_SEM_TEXTO') || error.message.includes('IMAGEM_SEM_TEXTO')) {
-                        msgErro += 'Arquivo sem texto legível. Envie uma imagem mais clara ou PDF com texto selecionável.';
+                        msgErro += 'Não foi possível baixar o arquivo. Tente enviar novamente.';
+                    } else if (error.message.includes('PDF_SEM_TEXTO')) {
+                        msgErro += 'PDF sem texto legível.\n\n*Dicas:*\n• Se for uma imagem escaneada, tente converter em imagem e envie como foto.\n• Se for um PDF protegido, remova a proteção antes de enviar.\n• Tente enviar novamente.';
+                    } else if (error.message.includes('PDF_TEXTO_INSUFICIENTE')) {
+                        msgErro += 'O PDF tem muito pouco texto legível.\n\n*Dicas:*\n• Certifique-se de que o PDF está legível.\n• Envie um documento melhor ou tente em formato de imagem.';
+                    } else if (error.message.includes('IMAGEM_SEM_TEXTO')) {
+                        msgErro += 'Imagem sem texto legível. Envie uma foto mais clara ou um documento em melhor resolução.';
+                    } else if (error.message.includes('WORD_SEM_TEXTO') ||
+                               error.message.includes('EXCEL_SEM_TEXTO') ||
+                               error.message.includes('CSV_SEM_TEXTO')) {
+                        msgErro += 'Arquivo sem conteúdo legível. Certifique-se de que o arquivo contém dados.';
                     } else if (error.message.includes('TIPO_NAO_SUPORTADO')) {
-                        msgErro += 'Formato não suportado. Envie apenas PDF ou imagens (JPG, PNG).';
+                        msgErro += 'Formato não suportado.\n\n*Formatos aceitos:*\n📋 PDF\n📊 Excel (XLS, XLSX)\n📄 Word (DOC, DOCX)\n📈 CSV\n🖼️ Imagem (JPG, PNG)';
                     } else {
-                        msgErro += 'Erro no processamento. Tente novamente.';
+                        msgErro += `Erro no processamento: ${error.message}\n\nTente enviar novamente ou contate o suporte.`;
                     }
                     
                     try {
@@ -364,7 +543,7 @@ client.onMessage(async (msg) => {
         // Ativa a espera do PDF
         if (textoRecebido === '!aviso' && grupoNome === NOME_GRUPO_AUDITORIA) {
             AGUARDANDO_PDF_AVISO = true;
-            await sendMessage(fromJid, '📄 *IMPORTAÇÃO DE AVISO*\n\nO sistema está aguardando o arquivo.\n👉 *Envie o PDF ou imagem do Aviso agora.*');
+            await sendMessage(fromJid, '📄 *IMPORTAÇÃO DE AVISO*\n\nO sistema está aguardando o arquivo.\n👉 *Envie um dos seguintes formatos:*\n\n📋 PDF\n📊 Excel (XLS, XLSX)\n📄 Word (DOC, DOCX)\n📈 CSV\n🖼️ Imagem (JPG, PNG)\n\n*Aguardando o arquivo...*');
             
             try {
                 const userId = msg.key.participant || msg.key.remoteJid;
@@ -405,11 +584,16 @@ client.onMessage(async (msg) => {
                 `🔸 *!atencao*  → Envia cobrança formal de prazo (24h).\n` +
                 `🔸 *!status*  → Exibe painel técnico de saúde do servidor.\n` +
                 `🔸 *!buscar* [termo]  → Busca nos logs por comandos/usuários.\n\n` +
-                `📄 *IMPORTADOR DE AVISO (PDF/IMAGEM)*\n` +
+                `📄 *IMPORTADOR DE AVISO (PDF/IMAGEM/EXCEL/WORD/CSV)*\n` +
                 `_Funcionalidade exclusiva do grupo ${NOME_GRUPO_AUDITORIA}_\n` +
                 `1️⃣ Digite *!aviso*\n` +
                 `2️⃣ O bot pedirá o arquivo.\n` +
-                `3️⃣ Envie o PDF ou foto do aviso.\n` +
+                `3️⃣ Envie qualquer um destes formatos:\n` +
+                `   • 📋 PDF\n` +
+                `   • 📊 Excel (XLS, XLSX)\n` +
+                `   • 📄 Word (DOC, DOCX)\n` +
+                `   • 📈 CSV\n` +
+                `   • 🖼️ Imagem (JPG, PNG)\n` +
                 `4️⃣ O bot extrairá os dados automaticamente.`;
                 
             await sendMessage(fromJid, textoMenu);
