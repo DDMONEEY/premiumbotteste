@@ -547,7 +547,7 @@ client.onMessage(async (msg) => {
                     
                     // Enviar resposta
                     console.log('📤 [ENVIO] Enviando...');
-                    await sendMessage(fromJid, resposta);
+                    await client.sendMessage(fromJid, { text: resposta });
                     console.log('✅ [CONCLUÍDO] Sucesso!\n');
                     
                     // Log do comando
