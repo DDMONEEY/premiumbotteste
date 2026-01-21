@@ -14,6 +14,17 @@ function extrairDadosAvancado(texto) {
                           .replace(/Página \d+ de \d+/gi, '')
                           .replace(/\r\n/g, '\n');
 
+    // Inserir quebra de linha antes de labels conhecidos para separar campos
+    const labels = [
+        'Nº SINISTRO', 'SEGURADORA', 'SEGURADO', 'MOTORISTA', 'TELEFONE', 'PLACAS',
+        'REMETENTE', 'ORIGEM', 'DESTINATÁRIO', 'DESTINO', 'LOCAL DO EVENTO',
+        'CIDADE DO EVENTO', 'LOCAL DA VISTORIA', 'CIDADE DA VISTORIA', 'NATUREZA',
+        'MANIFESTO', 'FATURA\/N\.FISCAL', 'MERCADORIA', 'VALOR DECLARADO', 'OBSERVAÇÃO',
+        'CIDADE', 'DATA', 'HORA'
+    ];
+    const labelsRegex = new RegExp(`(?:^|\s)(${labels.join('|')}):`, 'gi');
+    textoLimpo = textoLimpo.replace(labelsRegex, '\n$1:');
+
     console.log(`📝 [pdfHandler] Primeiros 500 chars do texto: ${textoLimpo.substring(0, 500)}`);
 
     // Função de extração otimizada com múltiplos padrões
@@ -51,14 +62,14 @@ function extrairDadosAvancado(texto) {
             /SINISTRO[:\s]*(\d+)/i
         ]),
         seguradora: pegar([
-            /SEGURADORA:[:\s]*(AXA SEGUROS|SOMPO|ALLIANZ|MAPFRE|[A-Z\s]+?)(?:\n|$)/i,
-            /SEGURADORA[:\s]*([A-Z\s]+?)(?:\n|$)/i,
-            /SEGURADO POR[:\s]*([A-Z\s]+?)(?:\n|$)/i
+            /SEGURADORA:[:\s]*([A-Z0-9\.\-&\s]+?)(?:APÓLICE|MODALIDADE|RAMO|CPF|CNPJ|\n|$)/i,
+            /SEGURADORA[:\s]*([A-Z0-9\.\-&\s]+?)(?:\n|$)/i,
+            /SEGURADO POR[:\s]*([A-Z0-9\.\-&\s]+?)(?:\n|$)/i
         ]),
         segurado: pegar([
-            /SEGURADO:[:\s]*(.*?)(?:CPF|CNPJ|CONTATO|\n)/i,
-            /SEGURADO[:\s]*(.*?)(?:\n|$)/i,
-            /NOME DO SEGURADO[:\s]*(.*?)(?:\n|$)/i
+            /SEGURADO:[:\s]*([A-Z0-9\.\-&\s]+?)(?:CPF|CNPJ|CONTATO|APÓLICE|MODALIDADE|SEGURADORA|BENEFICIÁRIO|CORRETOR|\n|$)/i,
+            /SEGURADO[:\s]*([A-Z0-9\.\-&\s]+?)(?:\n|$)/i,
+            /NOME DO SEGURADO[:\s]*([A-Z0-9\.\-&\s]+?)(?:\n|$)/i
         ]),
         motorista: pegar([
             /MOTORISTA:[:\s]*(.*?)(?:TELEFONE|CPF|\(|\n)/i,
