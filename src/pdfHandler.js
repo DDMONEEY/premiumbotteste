@@ -1,3 +1,7 @@
+/**
+ * @deprecated Use extrairCamposLista() para resposta formatada como lista
+ * Esta função retorna objeto e será removida em versões futuras
+ */
 function extrairDadosAvancado(texto) {
     console.log('🔍 [pdfHandler] Extraindo dados...');
     console.log(`📊 [pdfHandler] Comprimento do texto: ${texto?.length || 0} chars`);
@@ -188,7 +192,23 @@ function getDefaultData() {
     };
 }
 
-// Extração estrita no formato de lista solicitado
+/**
+ * FUNÇÃO PRINCIPAL - Extrai campos de aviso de sinistro e retorna lista formatada
+ * 
+ * @param {string} textoBruto - Texto extraído do PDF/documento
+ * @returns {string} Lista formatada com 20 campos fixos (hífen + espaço + campo: valor)
+ * 
+ * @example
+ * const textoPDF = await extrairTextoPDF(buffer);
+ * const resumo = extrairCamposLista(textoPDF);
+ * await enviarWhatsApp(resumo);
+ * 
+ * Formato de saída:
+ * - Nº sinistro: 201034
+ * - Seguradora: AXA SEGUROS
+ * - Segurado: PURA BENCAO TRANSPORTES LTDA
+ * ...
+ */
 function extrairCamposLista(textoBruto) {
         const texto = (textoBruto || '').replace(/\r\n/g, '\n');
 
@@ -204,9 +224,7 @@ function extrairCamposLista(textoBruto) {
             '|DESTINAT[ÁA]RIO' +
             '|DESTINO' +
             '|LOCAL\\s+DO\\s+EVENTO' +
-            '|CIDADE\\s+DO\\s+EVENTO' +
             '|LOCAL\\s+DA\\s+VISTORIA' +
-            '|CIDADE\\s+DA\\s+VISTORIA' +
             '|NATUREZA' +
             '|MANIFESTO(?:\\s*N[º°])?' +
             '|FATURA\\/?N\\.?FISCAL' +
@@ -231,7 +249,7 @@ function extrairCamposLista(textoBruto) {
             );
             const m = re.exec(texto);
             if (m && m[1]) return m[1].trim();
-            return capture('CIDADE\\s+DO\\s+EVENTO|CIDADE');
+            return '--';
         };
 
         const captureCidadeVistoria = () => {
@@ -241,7 +259,7 @@ function extrairCamposLista(textoBruto) {
             );
             const m = re.exec(texto);
             if (m && m[1]) return m[1].trim();
-            return capture('CIDADE\\s+DA\\s+VISTORIA|CIDADE');
+            return '--';
         };
 
         const sinistro = capture('N[º°]\\s*SINISTRO(?:\\s*\\(SEC\\))?');
@@ -260,10 +278,11 @@ function extrairCamposLista(textoBruto) {
         const cidadeVistoria = captureCidadeVistoria();
         const natureza = capture('NATUREZA');
         const manifesto = capture('MANIFESTO(?:\\s*N[º°])?');
-        const fatura = capture('FATURA\\/?N\\.?FISCAL|N\\.?FISCAL|NOTA\\s+FISCAL');
-        const mercadoria = capture('MERCADORIA|CARGA');
+        const fatura = capture('FATURA\\/?N\\.?FISCAL');
+        const mercadoria = capture('MERCADORIA');
         const valorDeclarado = capture('VALOR\\s+DECLARADO');
-        const observacao = capture('OBSERVA[ÇC][ÃA]O|OBSERVA[ÇC][ÕO]ES');
+        const observacaoRaw = capture('OBSERVA[ÇC][ÃA]O|OBSERVA[ÇC][ÕO]ES');
+        const observacao = observacaoRaw.length > 500 ? observacaoRaw.substring(0, 500) + '...' : observacaoRaw;
 
         return [
             `- Nº sinistro: ${sinistro || '--'}`,
