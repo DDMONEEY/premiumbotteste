@@ -74,8 +74,9 @@ async function processarPDF(buffer) {
         try {
             console.log('🔄 [PDF] Método 1: Usando PDF.js para extração de texto...');
             
-            // Carregar o PDF
-            const pdf = await pdfjs.getDocument({ data: buffer }).promise;
+            // Carregar o PDF - converter Buffer para Uint8Array
+            const uint8Array = new Uint8Array(buffer);
+            const pdf = await pdfjs.getDocument({ data: uint8Array }).promise;
             let textoCompleto = '';
             
             console.log(`📄 [PDF] Total de páginas: ${pdf.numPages}`);
@@ -84,7 +85,7 @@ async function processarPDF(buffer) {
             for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
                 try {
                     const page = await pdf.getPage(pageNum);
-                    const textContent = await page.getTextContent();
+                    const textContent = await page.getTextContent({ normalizeWhitespace: true });
                     const pageText = textContent.items.map(item => item.str).join(' ');
                     
                     if (pageText && pageText.trim().length > 0) {
