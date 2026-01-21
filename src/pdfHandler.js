@@ -286,7 +286,7 @@ function extrairCamposLista(textoBruto) {
         const observacaoRaw = capture('OBSERVA[ÇC][ÃA]O|OBSERVA[ÇC][ÕO]ES');
         const observacao = observacaoRaw.length > 500 ? observacaoRaw.substring(0, 500) + '...' : observacaoRaw;
 
-        return [
+        return '✅ RESUMO DO AVISO GERADO\n\n' + [
             `- Nº sinistro: ${sinistro || '--'}`,
             `- Seguradora: ${seguradora || '--'}`,
             `- Segurado: ${segurado || '--'}`,
