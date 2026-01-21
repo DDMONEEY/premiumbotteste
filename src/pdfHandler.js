@@ -193,7 +193,26 @@ function extrairCamposLista(textoBruto) {
         const texto = (textoBruto || '').replace(/\r\n/g, '\n');
 
         const LABELS_MASTER =
-            'N[º°]\\s*SINISTRO(?:\\s*\\(SEC\\))?|SEGURADORA|SEGURADO|MOTORISTA|TELEFONE|PLACAS?|REMETENTE|ORIGEM|DESTINAT[ÁA]RIO|DESTINO|LOCAL\\s+DO\\s+EVENTO|CIDADE\\s+DO\\s+EVENTO|LOCAL\\s+DA\\s+VISTORIA|CIDADE\\s+DA\\s+VISTORIA|NATUREZA|MANIFESTO(?:\\s*N[º°])?|FATURA\\/?N\\.?FISCAL|N\\.?FISCAL|NOTA\\s+FISCAL|MERCADORIA|CARGA|VALOR\\s+DECLARADO|OBSERVA[ÇC][ÃA]O|OBSERVA[ÇC][ÕO]ES';
+            'N[º°]\\s*SINISTRO(?:\\s*\\(SEC\\))?' +
+            '|SEGURADORA' +
+            '|SEGURADO' +
+            '|MOTORISTA' +
+            '|TELEFONE' +
+            '|PLACAS?' +
+            '|REMETENTE' +
+            '|ORIGEM' +
+            '|DESTINAT[ÁA]RIO' +
+            '|DESTINO' +
+            '|LOCAL\\s+DO\\s+EVENTO' +
+            '|CIDADE\\s+DO\\s+EVENTO' +
+            '|LOCAL\\s+DA\\s+VISTORIA' +
+            '|CIDADE\\s+DA\\s+VISTORIA' +
+            '|NATUREZA' +
+            '|MANIFESTO(?:\\s*N[º°])?' +
+            '|FATURA\\/?N\\.?FISCAL' +
+            '|MERCADORIA' +
+            '|VALOR\\s+DECLARADO' +
+            '|OBSERVA[ÇC][ÃA]O|OBSERVA[ÇC][ÕO]ES';
 
         const capture = (labelRegexStr) => {
             const re = new RegExp(
