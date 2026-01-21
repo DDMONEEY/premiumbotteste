@@ -246,7 +246,21 @@ class BaileysClient {
     // Enviar mensagem de texto
     async sendMessage(jid, text) {
         try {
-            await this.sock.sendMessage(jid, { text });
+            if (!this.sock) {
+                throw new Error('Cliente não inicializado');
+            }
+            
+            // Garantir que text seja string ou objeto válido
+            let payload;
+            if (typeof text === 'string') {
+                payload = { text };
+            } else if (typeof text === 'object' && text.text) {
+                payload = text; // Já é objeto { text: "..." }
+            } else {
+                payload = { text: String(text) };
+            }
+            
+            return await this.sock.sendMessage(jid, payload);
         } catch (error) {
             console.error('❌ Erro ao enviar mensagem:', error);
             throw error;
